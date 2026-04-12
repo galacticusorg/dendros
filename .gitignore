@@ -1,3 +1,12 @@
 *~
 dist
 src/dendros.egg-info
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+docs/_build
+.venv
+*.egg-info

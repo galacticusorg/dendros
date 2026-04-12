@@ -1,1 +1,14 @@
-__version__ = "0.0.1"
+"""Dendros: a Python toolkit for analyzing Galacticus semi-analytic model outputs."""
+from __future__ import annotations
+
+from ._collection import Collection, open_outputs
+from ._outputs import OutputIndex, OutputMeta
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "Collection",
+    "open_outputs",
+    "OutputIndex",
+    "OutputMeta",
+]
