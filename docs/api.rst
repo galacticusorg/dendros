@@ -18,6 +18,10 @@ API Reference
    :undoc-members:
    :show-inheritance:
 
+.. autofunction:: dendros.sfh_collapse_metallicities
+
+.. autofunction:: dendros.sfh_times
+
 Internal helpers
 ----------------
 

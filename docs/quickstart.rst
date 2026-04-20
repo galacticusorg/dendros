@@ -79,13 +79,13 @@ Reading datasets
 .. code-block:: python
 
    with open_outputs("galacticus.hdf5") as c:
-       data = c.read("Output1", ["nodeData/haloMass"])
-       # data["nodeData/haloMass"] is a numpy array
+       data = c.read("Output1", ["nodeData/basicMass"])
+       # data["nodeData/basicMass"] is a numpy array
 
        # Custom labels via dict
        data = c.read(
            "Output1",
-           {"Mhalo": "nodeData/haloMass", "Mstar": "nodeData/stellarMass"},
+           {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
        )
 
 Filtering
@@ -96,12 +96,12 @@ Pass a boolean mask or integer index array as ``where``:
 .. code-block:: python
 
    with open_outputs("galacticus.hdf5") as c:
-       masses = c.read("Output1", ["nodeData/haloMass"])["nodeData/haloMass"]
+       masses = c.read("Output1", ["nodeData/basicMass"])["nodeData/basicMass"]
        mask = masses > 1e12
 
        data = c.read(
            "Output1",
-           {"Mhalo": "nodeData/haloMass", "Mstar": "nodeData/stellarMass"},
+           {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
            where=mask,
        )
 
@@ -115,3 +115,20 @@ groups them automatically when you pass any single rank's filename or a glob::
 
 :meth:`~dendros.Collection.read` concatenates arrays from all ranks along
 axis 0.
+
+Star formation histories
+------------------------
+
+Star formation histories are output as lists of 2D :class:`numpy.ndarray` objects,
+with one dimension being time, and the other metallicity. Dendros provides
+functions to collapse (sum) over metallicity:
+
+.. code-block:: python
+
+   from dendros import sfh_collapse_metallicities, sfh_times
+
+   with open_outputs("galacticus.hdf5") as c:
+       sfh = c["Outputs/Output1/nodeData/diskStarFormationHistoryMass"]
+       sfh_times = sfh_times(sfh)
+       sfh_collapsed = sfh_collapse_metallicities(sfh)
+

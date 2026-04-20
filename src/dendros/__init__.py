@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._collection import Collection, open_outputs
 from ._outputs import OutputIndex, OutputMeta
+from ._star_formation import sfh_collapse_metallicities, sfh_times
 
 __version__ = "0.1.0"
 
@@ -11,4 +12,6 @@ __all__ = [
     "open_outputs",
     "OutputIndex",
     "OutputMeta",
+    "sfh_collapse_metallicities",
+    "sfh_times"
 ]
