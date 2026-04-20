@@ -13,11 +13,11 @@ def test_list_properties_columns(single_file):
         assert col in tbl.colnames
 
 
-def test_list_properties_contains_halo_mass(single_file):
+def test_list_properties_contains_basic_mass(single_file):
     with open_outputs(single_file) as c:
         tbl = c.list_properties("Output1")
     names = list(tbl["name"])
-    assert "haloMass" in names
+    assert "basicMass" in names
 
 
 def test_list_properties_by_integer_index(single_file):

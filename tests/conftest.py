@@ -33,16 +33,16 @@ def _make_file(
                 "time": 13.8,
                 "a": 1.0,
                 "data": {
-                    "haloMass": np.array([1e12, 2e12, 3e12]),
-                    "stellarMass": np.array([1e10, 2e10, 3e10]),
+                    "basicMass": np.array([1e12, 2e12, 3e12]),
+                    "diskMassStellar": np.array([1e10, 2e10, 3e10]),
                 },
             },
             {
                 "time": 6.0,
                 "a": 0.5,
                 "data": {
-                    "haloMass": np.array([5e11, 1e12]),
-                    "stellarMass": np.array([5e9, 1e10]),
+                    "basicMass": np.array([5e11, 1e12]),
+                    "diskMassStellar": np.array([5e9, 1e10]),
                 },
             },
         ]
@@ -57,7 +57,7 @@ def _make_file(
             node = grp.create_group("nodeData")
             for name, arr in out["data"].items():
                 ds = node.create_dataset(name, data=arr)
-                ds.attrs["description"] = f"Test dataset {name}"
+                ds.attrs["comment"] = f"Test dataset {name}"
                 ds.attrs["unitsInSI"] = 1.989e30  # solar mass in kg
 
 
@@ -90,8 +90,8 @@ def mpi_files(tmp_path):
             "time": 13.8,
             "a": 1.0,
             "data": {
-                "haloMass": np.array([1e12, 2e12]),
-                "stellarMass": np.array([1e10, 2e10]),
+                "basicMass": np.array([1e12, 2e12]),
+                "diskMassStellar": np.array([1e10, 2e10]),
             },
         }
     ]
@@ -100,8 +100,8 @@ def mpi_files(tmp_path):
             "time": 13.8,
             "a": 1.0,
             "data": {
-                "haloMass": np.array([3e12, 4e12]),
-                "stellarMass": np.array([3e10, 4e10]),
+                "basicMass": np.array([3e12, 4e12]),
+                "diskMassStellar": np.array([3e10, 4e10]),
             },
         }
     ]
