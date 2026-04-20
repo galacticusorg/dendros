@@ -278,9 +278,8 @@ class Collection:
 
         incomplete = []
         for path, h in zip(self._files, self._handles):
-            raw = h.attrs.get("statusCompletion")
-            status = _decode(raw) if raw is not None else None
-            if status != "complete":
+            status = h.attrs.get("statusCompletion")
+            if status != 0:
                 incomplete.append((path, status))
 
         if not incomplete:
@@ -321,11 +320,12 @@ class Collection:
         ----------
         format:
             ``"astropy"`` (default) returns an :class:`astropy.table.Table`;
-            ``"pandas"`` returns a :class:`pandas.DataFrame`.
+            ``"pandas"`` returns a :class:`pandas.DataFrame`;
+            ``"tabulate"`` returns a ``str`` formatted using the ``tabulate`` library.
 
         Returns
         -------
-        astropy.table.Table or pandas.DataFrame
+        astropy.table.Table, pandas.DataFrame, or tabulate-formatted string
         """
         return self.outputs.table(format=format)
 
@@ -343,11 +343,11 @@ class Collection:
         output:
             Output name (e.g. ``"Output1"``) or 1-based integer index.
         format:
-            ``"astropy"`` (default) or ``"pandas"``.
+            ``"astropy"`` (default), ``"pandas"``, or ``"tabulate"``.
 
         Returns
         -------
-        astropy.table.Table or pandas.DataFrame
+        astropy.table.Table, pandas.DataFrame, or tabulate-formatted string
         """
         output_name = _resolve_output_name(output)
         path = f"{self._output_root}/{output_name}/nodeData"
@@ -366,7 +366,7 @@ class Collection:
             attrs = {k: _decode(v) for k, v in ds.attrs.items()}
             raw_units = attrs.get("unitsInSI")
             try:
-                units_val = float(raw_units) if raw_units not in (None, "") else None
+                units_val = float(raw_units) if raw_units not in (None, "") else 1.0
             except (TypeError, ValueError):
                 units_val = raw_units
             rows.append(
@@ -374,12 +374,12 @@ class Collection:
                     "name": name,
                     "dtype": str(ds.dtype),
                     "shape": str(ds.shape),
-                    "description": attrs.get("description", ""),
+                    "description": attrs.get("comment", ""),
                     "unitsInSI": units_val,
                 }
             )
 
-        return _make_table(rows, format=format)
+        return _make_table(rows, format=format, maxcolwidths=[None, None, None, None, 25, None])
 
     # ------------------------------------------------------------------
     # Reading datasets
@@ -471,7 +471,7 @@ class Collection:
 # ---------------------------------------------------------------------------
 
 
-def _make_table(rows: List[dict], format: str):
+def _make_table(rows: List[dict], format: str, **kwargs):
     """Convert a list of row dicts to the requested table format."""
     if format == "astropy":
         from astropy.table import Table
@@ -492,8 +492,26 @@ def _make_table(rows: List[dict], format: str):
         if not rows:
             return pd.DataFrame()
         return pd.DataFrame(rows)
+    elif format == "tabulate":
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError(
+                "pandas is not installed. "
+                "Install it with: pip install 'dendros[pandas]'"
+            ) from exc
+        try:
+            from tabulate import tabulate
+        except ImportError as exc:
+            raise ImportError(
+                "tabulate is not installed. "
+                "Install it with: pip install 'dendros[tabulate]'"
+            ) from exc
+        if not rows:
+            return ""
+        return tabulate(pd.DataFrame(rows), headers=list(rows[0].keys()), **kwargs)
     else:
-        raise ValueError(f"format must be 'astropy' or 'pandas'; got {format!r}")
+        raise ValueError(f"format must be 'astropy', 'pandas', or 'tabulate'; got {format!r}")
 
 
 # ---------------------------------------------------------------------------

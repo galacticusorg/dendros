@@ -22,8 +22,8 @@ def _make_file(
         List of dicts with keys ``"time"``, ``"a"``, and ``"data"`` (a dict
         mapping dataset name → numpy array).  Defaults to two snapshot outputs.
     complete:
-        If ``True``, writes ``statusCompletion = "complete"``; otherwise
-        writes ``"incomplete"``.
+        If ``True``, writes ``statusCompletion = 0``; otherwise
+        writes ``1``.
     output_root:
         Name of the top-level group that holds the ``Output*`` groups.
     """
@@ -48,7 +48,7 @@ def _make_file(
         ]
 
     with h5py.File(path, "w") as f:
-        f.attrs["statusCompletion"] = "complete" if complete else "incomplete"
+        f.attrs["statusCompletion"] = 0 if complete else 1
         root = f.create_group(output_root)
         for i, out in enumerate(outputs, 1):
             grp = root.create_group(f"Output{i}")

@@ -19,10 +19,10 @@ semi-analytic model outputs.
 pip install dendros
 ```
 
-To also enable pandas table output:
+To also enable pandas and tabulate table output:
 
 ```bash
-pip install 'dendros[pandas]'
+pip install 'dendros[pandas,tabulate]'
 ```
 
 Install the latest development version directly from GitHub:
@@ -82,8 +82,11 @@ with open_outputs("galacticus.hdf5") as c:
     tbl = c.list_outputs()          # astropy Table by default
     print(tbl)
 
-    # or as pandas DataFrame:
+    # or as a pandas DataFrame:
     df = c.list_outputs(format="pandas")
+
+    # or as a tabulate string:
+    df = c.list_outputs(format="tabulate")
 ```
 
 Example output:
@@ -127,13 +130,13 @@ stellarMass float64 (1000,) Stellar mass of disk 1.989e+30
 ```python
 with open_outputs("galacticus.hdf5") as c:
     # List of dataset paths → same strings used as dict keys
-    data = c.read("Output1", ["nodeData/haloMass", "nodeData/stellarMass"])
-    print(data["nodeData/haloMass"])   # numpy array
+    data = c.read("Output1", ["nodeData/basicMass", "nodeData/diskMassStellar"])
+    print(data["nodeData/basicMass"])   # numpy array
 
     # Dict → custom labels
     data = c.read(
         "Output1",
-        {"Mhalo": "nodeData/haloMass", "Mstar": "nodeData/stellarMass"},
+        {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
     )
     print(data["Mhalo"])
 ```
@@ -145,13 +148,13 @@ Pass a boolean mask or integer index array as `where`:
 ```python
 with open_outputs("galacticus.hdf5") as c:
     # First read to build a mask
-    masses = c.read("Output1", ["nodeData/haloMass"])["nodeData/haloMass"]
+    masses = c.read("Output1", ["nodeData/basicMass"])["nodeData/basicMass"]
     mask = masses > 1e12
 
     # Then read everything for the selected galaxies only
     data = c.read(
         "Output1",
-        {"Mhalo": "nodeData/haloMass", "Mstar": "nodeData/stellarMass"},
+        {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
         where=mask,
     )
 ```
@@ -164,7 +167,7 @@ with open_outputs("galacticus.hdf5") as c:
     grp = c["Outputs/Output1"]
     print(grp.keys())                      # subgroups / datasets
     print(grp.attrs)                       # group attributes
-    ds = c["Outputs/Output1/nodeData/haloMass"]
+    ds = c["Outputs/Output1/nodeData/basicMass"]
     print(ds.dtype, ds.shape)
 ```
 
