@@ -10,3 +10,5 @@ htmlcov
 docs/_build
 .venv
 *.egg-info
+.ipynb_checkpoints
+build
