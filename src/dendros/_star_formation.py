@@ -42,7 +42,7 @@ def sfh_times(dataset: "DatasetProxy"):
     """
     if 'time' in dataset.attrs:
         # The 'time' attribute exists - we can convert to a fixed length 2D array.
-        times = np.array(re.sub(r'[\[\],]','',dataset.attrs['time']).split())
+        times = np.array(re.sub(r'[\[\],]','',dataset.attrs['time']).split(),dtype=float)
     else:
         times = None
     return times
