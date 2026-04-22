@@ -12,7 +12,7 @@ import numpy as np
 
 from ._outputs import OutputIndex
 
-_MPI_SUFFIX = re.compile(r"^(.+)_MPI:(\d{4})$")
+_MPI_SUFFIX = re.compile(r"^(.+):MPI(\d{4})$")
 
 
 # ---------------------------------------------------------------------------
@@ -602,7 +602,7 @@ def _auto_detect_mpi(path: str) -> List[str]:
     stem = p.stem
     m = _MPI_SUFFIX.match(stem)
     base = m.group(1) if m else stem
-    peers = sorted(p.parent.glob(f"{base}_MPI:????{p.suffix}"))
+    peers = sorted(p.parent.glob(f"{base}:MPI????{p.suffix}"))
     if peers:
         return [str(x) for x in peers]
     return [path]
