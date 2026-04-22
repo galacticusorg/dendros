@@ -105,8 +105,8 @@ def mpi_files(tmp_path):
             },
         }
     ]
-    p0 = tmp_path / "galacticus_MPI:0000.hdf5"
-    p1 = tmp_path / "galacticus_MPI:0001.hdf5"
+    p0 = tmp_path / "galacticus:MPI0000.hdf5"
+    p1 = tmp_path / "galacticus:MPI0001.hdf5"
     _make_file(p0, outputs=rank0_outputs)
     _make_file(p1, outputs=rank1_outputs)
     return str(p0), str(p1)
