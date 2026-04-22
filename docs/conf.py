@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath("../src"))
 
 project = "Dendros"
 author = "Andrew Benson"
-copyright = "2024, Andrew Benson"
+copyright = "2026, Andrew Benson"
 
 # Read the version from the installed package to avoid duplication.
 try:
