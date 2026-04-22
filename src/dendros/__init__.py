@@ -5,7 +5,7 @@ from ._collection import Collection, open_outputs
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "Collection",
