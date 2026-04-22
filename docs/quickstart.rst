@@ -105,6 +105,64 @@ Pass a boolean mask or integer index array as ``where``:
            where=mask,
        )
 
+Tracing galaxy histories
+------------------------
+
+Given one or more ``nodeUniqueIDBranchTip`` values, dendros can assemble each
+galaxy's full history across all outputs:
+
+.. code-block:: python
+
+   from dendros import open_outputs
+
+   with open_outputs("galacticus.hdf5") as c:
+       ids = [101, 104]   # branch-tip IDs of galaxies of interest
+       hist = c.trace_history(
+           ids,
+           {"Mstar": "nodeData/diskMassStellar"},
+       )
+
+   # hist["Mstar"]             shape (2, n_outputs); NaN where absent
+   # hist["time"]              shape (2, n_outputs); NaN where absent
+   # hist["expansion_factor"]  shape (2, n_outputs)
+   # hist["present"]           bool mask, shape (2, n_outputs)
+   # hist["output_names"]      object array of output group names
+   # hist["ids"]               int64 array, the normalized input
+
+A 2-D per-galaxy property (e.g. a spectrum of shape ``(N_gals, n_bins)``) is
+returned as a 3-D array of shape ``(n_galaxies, n_bins, n_outputs)`` — one
+extra trailing axis for time. Each galaxy need not be present at every output
+(it may have formed later or merged earlier), so history arrays are *ragged*
+in time. Absent slots are filled with:
+
+* ``NaN`` for floating-point properties (and for the ``time`` and
+  ``expansion_factor`` arrays);
+* the value of ``int_sentinel`` (default ``-1``) for integer properties;
+* ``False`` for boolean properties.
+
+The ``present`` mask is the canonical indicator of presence and should be
+preferred to sentinel checks::
+
+   import numpy as np
+   mask = hist["present"][0]         # galaxy 0 presence across outputs
+   times  = hist["time"][0][mask]
+   masses = hist["Mstar"][0][mask]
+
+Restrict to a subset of outputs with the ``outputs=`` argument (accepts a
+``range``, a list of 1-based integers, or output group names)::
+
+   hist = c.trace_history(ids, ["nodeData/basicMass"], outputs=range(1, 6))
+
+Multi-file collections search each file independently because
+``nodeUniqueIDBranchTip`` is only unique *within* a single file. By default,
+if the same ID is found in more than one file at the same output the call
+raises :class:`ValueError`; pass ``on_duplicate_file_match="warn"`` or
+``"first"`` to keep the first match instead.
+
+If ``nodeUniqueIDBranchTip`` was not included in the Galacticus run, the
+function raises a :class:`KeyError` that points you at the missing output
+property.
+
 MPI outputs
 -----------
 

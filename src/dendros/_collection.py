@@ -447,6 +447,37 @@ class Collection:
         return result
 
     # ------------------------------------------------------------------
+    # Galaxy history
+    # ------------------------------------------------------------------
+
+    def trace_history(
+        self,
+        ids,
+        properties: Union[List[str], Dict[str, str]],
+        outputs=None,
+        *,
+        id_dataset: str = "nodeData/nodeUniqueIDBranchTip",
+        on_duplicate_file_match: str = "error",
+        int_sentinel: int = -1,
+    ) -> Dict[str, np.ndarray]:
+        """Trace the history of specified galaxies across outputs.
+
+        Convenience wrapper around :func:`dendros.trace_galaxy_history`.
+        See that function for full parameter and return-value documentation.
+        """
+        from ._galaxy_history import trace_galaxy_history
+
+        return trace_galaxy_history(
+            self,
+            ids,
+            properties,
+            outputs=outputs,
+            id_dataset=id_dataset,
+            on_duplicate_file_match=on_duplicate_file_match,
+            int_sentinel=int_sentinel,
+        )
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
