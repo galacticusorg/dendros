@@ -270,7 +270,7 @@ def test_output_not_found_raises(history_file):
 def test_returned_keys(history_file):
     with open_outputs(history_file) as c:
         hist = c.trace_history([104], ["nodeData/basicMass"])
-    for key in ("time", "expansion_factor", "present", "output_names", "ids"):
+    for key in ("time", "expansion_factor", "redshift", "present", "output_names", "ids"):
         assert key in hist
     assert hist["ids"].dtype == np.int64
     assert hist["present"].dtype == np.bool_
