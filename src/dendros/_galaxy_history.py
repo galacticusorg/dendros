@@ -211,7 +211,7 @@ def trace_galaxy_history(
         first_file_path: Optional[str] = None
 
         for h_idx, h in enumerate(handles):
-            id_path = f"{root}/{meta.name}/{id_dataset}"
+            id_path = f"{root}/{meta.name}/{id_dataset.lstrip('/')}"
             try:
                 ids_file = h[id_path][()]
             except KeyError:
