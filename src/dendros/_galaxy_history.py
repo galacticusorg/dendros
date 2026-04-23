@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 _RESERVED_LABELS = frozenset(
-    {"time", "expansion_factor", "present", "output_names", "ids"}
+    {"time", "expansion_factor", "redshift", "present", "output_names", "ids"}
 )
 
 _DUPLICATE_MODES = ("error", "warn", "first")
@@ -62,8 +62,8 @@ def trace_galaxy_history(
     slice, and stacks the results along a trailing "output" axis.
 
     Slots where a galaxy is absent at a given output are filled with
-    :data:`numpy.nan` (floating-point properties, and the ``time`` and
-    ``expansion_factor`` metadata arrays), with ``int_sentinel`` (integer
+    :data:`numpy.nan` (floating-point properties, and the ``time``, ``redshift``
+    and ``expansion_factor`` metadata arrays), with ``int_sentinel`` (integer
     properties), or with ``False`` (boolean properties).  The returned
     ``present`` mask is the canonical indicator of presence/absence and should
     be preferred to sentinel checks.
@@ -114,6 +114,8 @@ def trace_galaxy_history(
           ``(n_galaxies, W, n_outputs)`` array; and so on.
         * ``"time"`` – float array ``(n_galaxies, n_outputs)`` of output
           times, NaN where the galaxy is absent.
+        * ``"redshift"`` – float array ``(n_galaxies, n_outputs)`` of redshifts,
+          NaN where the galaxy is absent.
         * ``"expansion_factor"`` – float array ``(n_galaxies, n_outputs)``
           of expansion factors, NaN where the galaxy is absent.
         * ``"present"`` – bool array ``(n_galaxies, n_outputs)`` that is
@@ -144,6 +146,7 @@ def trace_galaxy_history(
     IDs that are never found anywhere produces a :class:`UserWarning`
     rather than an error, since exploratory workflows often probe IDs of
     uncertain provenance.
+
     """
     if on_duplicate_file_match not in _DUPLICATE_MODES:
         raise ValueError(
@@ -341,6 +344,7 @@ def trace_galaxy_history(
     output = dict(results)
     output["time"] = time
     output["expansion_factor"] = expansion_factor
+    output["redshift"] = 1.0 / expansion_factor - 1.0
     output["present"] = present
     output["output_names"] = np.array([m.name for m in chosen], dtype=object)
     output["ids"] = ids_arr
