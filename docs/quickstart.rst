@@ -154,10 +154,12 @@ Restrict to a subset of outputs with the ``outputs=`` argument (accepts a
    hist = c.trace_history(ids, ["nodeData/basicMass"], outputs=range(1, 6))
 
 Multi-file collections search each file independently because
-``nodeUniqueIDBranchTip`` is only unique *within* a single file. By default,
-if the same ID is found in more than one file at the same output the call
-raises :class:`ValueError`; pass ``on_duplicate_file_match="warn"`` or
-``"first"`` to keep the first match instead.
+``nodeUniqueIDBranchTip`` is only unique *within* a single file (for MPI
+outputs ``nodeUniqueIDBranchTip`` *is* unique across all files). By
+default, if the same ID is found in more than one file at the same
+output the call raises :class:`ValueError`; pass
+``on_duplicate_file_match="warn"`` or ``"first"`` to keep the first
+match instead.
 
 If ``nodeUniqueIDBranchTip`` was not included in the Galacticus run, the
 function raises a :class:`KeyError` that points you at the missing output
