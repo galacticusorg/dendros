@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._collection import Collection, open_outputs
+from ._galaxy_history import trace_galaxy_history
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
@@ -13,5 +14,6 @@ __all__ = [
     "OutputIndex",
     "OutputMeta",
     "sfh_collapse_metallicities",
-    "sfh_times"
+    "sfh_times",
+    "trace_galaxy_history",
 ]

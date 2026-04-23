@@ -22,6 +22,8 @@ API Reference
 
 .. autofunction:: dendros.sfh_times
 
+.. autofunction:: dendros.trace_galaxy_history
+
 Internal helpers
 ----------------
 
