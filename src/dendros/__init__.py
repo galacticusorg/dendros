@@ -6,7 +6,7 @@ from ._galaxy_history import trace_galaxy_history
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "Collection",

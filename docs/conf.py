@@ -20,7 +20,7 @@ try:
     from importlib.metadata import version as _version
     release = _version("dendros")
 except Exception:
-    release = "0.1.1"
+    release = "0.2.0"
 version = ".".join(release.split(".")[:2])
 
 # -- General configuration -----------------------------------------------------
