@@ -199,9 +199,53 @@ def trace_galaxy_history(
     time = np.full((n_galaxies, n_outputs), np.nan, dtype=float)
     expansion_factor = np.full((n_galaxies, n_outputs), np.nan, dtype=float)
 
-    results: Dict[str, np.ndarray] = {}
+    # ------------------------------------------------------------------
+    # Pre-pass: validate each property exists in every chosen output of
+    # every file, and discover dtype and per-galaxy tail shape from the
+    # first file.  This ensures KeyError is raised for misnamed paths
+    # regardless of whether any requested ID actually matches, and that
+    # the allocated result arrays carry the correct dtype and shape for
+    # properties that never materialize a non-empty match.
+    # ------------------------------------------------------------------
+    result_dtypes: Dict[str, np.dtype] = {}
     result_tail_shapes: Dict[str, tuple] = {}
     result_first_output: Dict[str, str] = {}
+
+    for meta in chosen:
+        for label, rel in properties_map.items():
+            prop_path = f"{root}/{meta.name}/{rel.lstrip('/')}"
+            for h_idx, h in enumerate(handles):
+                try:
+                    ds = h[prop_path]
+                except KeyError:
+                    raise KeyError(
+                        f"Dataset '{prop_path}' not found in "
+                        f"'{files[h_idx]}'"
+                    ) from None
+                if h_idx == 0:
+                    tail = tuple(ds.shape[1:])
+                    if label not in result_dtypes:
+                        result_dtypes[label] = ds.dtype
+                        result_tail_shapes[label] = tail
+                        result_first_output[label] = meta.name
+                    elif tail != result_tail_shapes[label]:
+                        raise ValueError(
+                            f"Property '{rel}' has tail shape "
+                            f"{tail!r} at output '{meta.name}' but "
+                            f"{result_tail_shapes[label]!r} at output "
+                            f"'{result_first_output[label]}'. "
+                            "Per-galaxy shape must be consistent across "
+                            "the chosen outputs."
+                        )
+
+    results: Dict[str, np.ndarray] = {}
+    for label in properties_map:
+        dtype = result_dtypes[label]
+        tail = result_tail_shapes[label]
+        fill = _fill_value_for_dtype(dtype, int_sentinel)
+        full_shape = (n_galaxies,) + tail + (n_outputs,)
+        results[label] = np.full(full_shape, fill, dtype=dtype)
+
     duplicate_warned_files: set = set()
 
     for o, meta in enumerate(chosen):
@@ -291,35 +335,8 @@ def trace_galaxy_history(
             file_arrays: Dict[int, np.ndarray] = {}
             for h_idx, rows, gal_idx in file_hits:
                 if h_idx not in file_arrays:
-                    try:
-                        file_arrays[h_idx] = handles[h_idx][prop_path_template][()]
-                    except KeyError:
-                        raise KeyError(
-                            f"Dataset '{prop_path_template}' not found in "
-                            f"'{files[h_idx]}'"
-                        ) from None
+                    file_arrays[h_idx] = handles[h_idx][prop_path_template][()]
                 arr_file = file_arrays[h_idx]
-
-                if label not in results:
-                    tail = arr_file.shape[1:]
-                    fill = _fill_value_for_dtype(arr_file.dtype, int_sentinel)
-                    full_shape = (n_galaxies,) + tail + (n_outputs,)
-                    results[label] = np.full(full_shape, fill, dtype=arr_file.dtype)
-                    result_tail_shapes[label] = tail
-                    result_first_output[label] = meta.name
-                else:
-                    expected_tail = result_tail_shapes[label]
-                    if arr_file.shape[1:] != expected_tail:
-                        raise ValueError(
-                            f"Property '{rel}' has tail shape "
-                            f"{arr_file.shape[1:]!r} at output "
-                            f"'{meta.name}' but "
-                            f"{expected_tail!r} at output "
-                            f"'{result_first_output[label]}'. "
-                            "Per-galaxy shape must be consistent across "
-                            "the chosen outputs."
-                        )
-
                 results[label][gal_idx, ..., o] = arr_file[rows]
 
     # Emit warnings for IDs never found.
@@ -333,13 +350,6 @@ def trace_galaxy_history(
                 UserWarning,
                 stacklevel=2,
             )
-
-    # Allocate result arrays for any property that never materialized
-    # (because no requested galaxy was ever present).  We fall back to a
-    # NaN float array of shape (n_galaxies, n_outputs).
-    for label in properties_map:
-        if label not in results:
-            results[label] = np.full((n_galaxies, n_outputs), np.nan, dtype=float)
 
     output = dict(results)
     output["time"] = time

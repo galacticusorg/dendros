@@ -267,6 +267,37 @@ def test_output_not_found_raises(history_file):
             c.trace_history([104], ["nodeData/basicMass"], outputs=[9])
 
 
+def test_missing_property_raises_when_no_ids_matched(history_file):
+    """Property validation must run even when no requested ID is found."""
+    with open_outputs(history_file) as c:
+        # ID 9999 matches nowhere, so no galaxy data is ever read, but the
+        # missing-property path must still raise eagerly.
+        with pytest.raises(KeyError, match="notAThing"):
+            c.trace_history([9999], ["nodeData/notAThing"])
+
+
+def test_integer_property_shape_when_no_ids_matched(history_file):
+    """An integer property with no matches must still have int dtype
+    and the correct tail shape (not fall back to NaN floats)."""
+    with open_outputs(history_file) as c:
+        with pytest.warns(UserWarning, match="never found"):
+            hist = c.trace_history([9999], ["nodeData/nodeIndex"])
+    arr = hist["nodeData/nodeIndex"]
+    assert np.issubdtype(arr.dtype, np.integer)
+    assert arr.shape == (1, 3)
+    assert (arr == -1).all()
+
+
+def test_2d_property_shape_when_no_ids_matched(history_file):
+    """A 2D property with no matches keeps the per-galaxy tail axis."""
+    with open_outputs(history_file) as c:
+        with pytest.warns(UserWarning, match="never found"):
+            hist = c.trace_history([9999], ["nodeData/spectrum"])
+    arr = hist["nodeData/spectrum"]
+    assert arr.shape == (1, 4, 3)
+    assert np.isnan(arr).all()
+
+
 def test_returned_keys(history_file):
     with open_outputs(history_file) as c:
         hist = c.trace_history([104], ["nodeData/basicMass"])
