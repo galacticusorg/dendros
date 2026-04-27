@@ -208,6 +208,253 @@ def history_file_varying_width(tmp_path):
     return str(p)
 
 
+_MCMC_CONFIG_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<parameters>
+  <formatVersion value="2"/>
+  <posteriorSampleLikelihood value="galaxyPopulation">
+    <baseParametersFileName value="{base_params}"/>
+  </posteriorSampleLikelihood>
+  <posteriorSampleSimulation value="{simulation_kind}">
+    <logFileRoot value="{log_root}"/>
+{model_parameters}
+  </posteriorSampleSimulation>
+</parameters>
+"""
+
+_MCMC_PARAM_BLOCK = """\
+    <modelParameter value="active">
+      <name value="{name}"/>
+{label_line}      <distributionFunction1DPrior value="uniform">
+        <limitLower value="{lo}"/>
+        <limitUpper value="{hi}"/>
+      </distributionFunction1DPrior>
+      <operatorUnaryMapper value="{mapper}"/>
+      <distributionFunction1DPerturber value="cauchy">
+        <median value="0.0"/>
+        <scale value="1.0e-4"/>
+      </distributionFunction1DPerturber>
+    </modelParameter>
+"""
+
+_MCMC_INDEPENDENT_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<parameters>
+  <formatVersion value="2"/>
+  <posteriorSampleLikelihood value="independentLikelihoods">
+    <parameterMap value="alpha"/>
+    <posteriorSampleLikelihood value="galaxyPopulation">
+      <baseParametersFileName value="baseA.xml"/>
+    </posteriorSampleLikelihood>
+    <parameterMap value="alpha beta"/>
+    <posteriorSampleLikelihood value="galaxyPopulation">
+      <baseParametersFileName value="baseB.xml"/>
+    </posteriorSampleLikelihood>
+  </posteriorSampleLikelihood>
+  <posteriorSampleSimulation value="differentialEvolution">
+    <logFileRoot value="indep"/>
+    <modelParameter value="active">
+      <name value="alpha"/>
+      <distributionFunction1DPrior value="uniform">
+        <limitLower value="0.0"/>
+        <limitUpper value="1.0"/>
+      </distributionFunction1DPrior>
+      <operatorUnaryMapper value="identity"/>
+      <distributionFunction1DPerturber value="cauchy">
+        <median value="0.0"/>
+        <scale value="1.0e-4"/>
+      </distributionFunction1DPerturber>
+    </modelParameter>
+    <modelParameter value="active">
+      <name value="beta"/>
+      <distributionFunction1DPrior value="uniform">
+        <limitLower value="-1.0"/>
+        <limitUpper value="1.0"/>
+      </distributionFunction1DPrior>
+      <operatorUnaryMapper value="identity"/>
+      <distributionFunction1DPerturber value="cauchy">
+        <median value="0.0"/>
+        <scale value="1.0e-4"/>
+      </distributionFunction1DPerturber>
+    </modelParameter>
+  </posteriorSampleSimulation>
+</parameters>
+"""
+
+
+def _write_mcmc_config(
+    tmp_path,
+    *,
+    parameters,
+    simulation_kind: str = "differentialEvolution",
+    log_root: str = "chains",
+    base_params: str = "base.xml",
+):
+    """Write a minimal MCMC config XML and return its path.
+
+    *parameters* is a sequence of dicts, each with keys:
+    ``name``, optional ``label``, ``lo``, ``hi``, optional ``mapper``.
+    """
+    blocks = []
+    for p in parameters:
+        label_line = (
+            f'      <label value="{p["label"]}"/>\n' if p.get("label") else ""
+        )
+        blocks.append(
+            _MCMC_PARAM_BLOCK.format(
+                name=p["name"],
+                label_line=label_line,
+                lo=p["lo"],
+                hi=p["hi"],
+                mapper=p.get("mapper", "identity"),
+            )
+        )
+    text = _MCMC_CONFIG_TEMPLATE.format(
+        base_params=base_params,
+        log_root=log_root,
+        simulation_kind=simulation_kind,
+        model_parameters="".join(blocks).rstrip("\n"),
+    )
+    path = tmp_path / "mcmcConfig.xml"
+    path.write_text(text)
+    return path
+
+
+def _write_chain_file(
+    path,
+    *,
+    rank: int,
+    states: np.ndarray,
+    log_posteriors: np.ndarray,
+    log_likelihoods: np.ndarray,
+    converged: np.ndarray = None,
+    eval_times: np.ndarray = None,
+    velocities: np.ndarray = None,
+    write_header: bool = False,
+    parameter_names=(),
+):
+    """Write a single ``_NNNN.log`` chain file."""
+    n = states.shape[0]
+    if converged is None:
+        converged = np.zeros(n, dtype=bool)
+    if eval_times is None:
+        eval_times = np.arange(1, n + 1, dtype=float)
+
+    with open(path, "w") as fh:
+        if write_header:
+            fh.write("# Simulation state chain file\n")
+            fh.write("# Columns:\n")
+            fh.write("#    1 = Simulation step\n")
+            fh.write("#    2 = Chain index\n")
+            fh.write("#    3 = Evaluation time (s)\n")
+            fh.write("#    4 = Chain is converged? [T/F]\n")
+            fh.write("#    5 = log posterior\n")
+            fh.write("#    6 = log likelihood\n")
+            for i, name in enumerate(parameter_names, start=7):
+                fh.write(f"#   {i:>2} = Parameter `{name}`\n")
+        for i in range(n):
+            row = [
+                str(i + 1),
+                str(rank),
+                f"{float(eval_times[i]):.4f}",
+                "T" if bool(converged[i]) else "F",
+                repr(float(log_posteriors[i])),
+                repr(float(log_likelihoods[i])),
+            ]
+            row.extend(repr(float(x)) for x in states[i])
+            if velocities is not None:
+                row.extend(repr(float(x)) for x in velocities[i])
+            fh.write(" ".join(row) + "\n")
+
+
+@pytest.fixture()
+def mcmc_de_run(tmp_path):
+    """A two-rank differential-evolution MCMC run with two parameters and headerless chains."""
+    config_path = _write_mcmc_config(
+        tmp_path,
+        parameters=[
+            {"name": "p/a", "label": "a", "lo": 0.0, "hi": 1.0},
+            {"name": "p/b", "lo": -1.0, "hi": 1.0},
+        ],
+        log_root="chains",
+    )
+    rng = np.random.default_rng(0)
+    for rank in (0, 1):
+        states = rng.normal(size=(5, 2))
+        logp = rng.normal(size=5)
+        logl = logp - 1.0
+        _write_chain_file(
+            tmp_path / f"chains_{rank:04d}.log",
+            rank=rank,
+            states=states,
+            log_posteriors=logp,
+            log_likelihoods=logl,
+        )
+    return str(config_path)
+
+
+@pytest.fixture()
+def mcmc_de_run_headered(tmp_path):
+    """A single-rank DE run whose chain file carries a ``# `` header."""
+    config_path = _write_mcmc_config(
+        tmp_path,
+        parameters=[
+            {"name": "p/a", "label": "a", "lo": 0.0, "hi": 1.0},
+            {"name": "p/b", "label": "b", "lo": -1.0, "hi": 1.0},
+        ],
+        log_root="chainsh",
+    )
+    rng = np.random.default_rng(1)
+    states = rng.normal(size=(4, 2))
+    logp = rng.normal(size=4)
+    logl = logp - 0.5
+    _write_chain_file(
+        tmp_path / "chainsh_0000.log",
+        rank=0,
+        states=states,
+        log_posteriors=logp,
+        log_likelihoods=logl,
+        write_header=True,
+        parameter_names=["p/a", "p/b"],
+    )
+    return str(config_path)
+
+
+@pytest.fixture()
+def mcmc_ps_run(tmp_path):
+    """A one-rank particle-swarm run; rows have state followed by velocity columns."""
+    config_path = _write_mcmc_config(
+        tmp_path,
+        parameters=[
+            {"name": "x", "lo": 0.0, "hi": 1.0},
+            {"name": "y", "lo": 0.0, "hi": 1.0},
+        ],
+        simulation_kind="particleSwarm",
+        log_root="ps",
+    )
+    rng = np.random.default_rng(2)
+    states = rng.uniform(size=(3, 2))
+    velocities = rng.normal(size=(3, 2)) * 0.01
+    logp = rng.normal(size=3)
+    _write_chain_file(
+        tmp_path / "ps_0000.log",
+        rank=0,
+        states=states,
+        log_posteriors=logp,
+        log_likelihoods=logp - 0.1,
+        velocities=velocities,
+    )
+    return str(config_path), states, velocities
+
+
+@pytest.fixture()
+def mcmc_independent_config(tmp_path):
+    """An ``independentLikelihoods`` config with two leaves and per-child parameterMap."""
+    path = tmp_path / "indepConfig.xml"
+    path.write_text(_MCMC_INDEPENDENT_TEMPLATE)
+    return str(path)
+
+
 @pytest.fixture()
 def mpi_files(tmp_path):
     """Two MPI-split files that together cover one output."""
