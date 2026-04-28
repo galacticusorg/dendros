@@ -335,3 +335,40 @@ def test_write_parameter_files_chain_value_passes_through(
     b = float(tree.getroot().find("p/b").get("value"))
     assert a == chain0.state[2, 0]
     assert b == chain0.state[2, 1]
+
+
+def test_write_parameter_files_rejects_parent_traversal(
+    mcmc_independent_run_with_bases, tmp_path
+):
+    """name_format containing `..` segments must not escape out_dir."""
+    # The fixture's baseA.xml already lives in tmp_path; capture its contents
+    # so we can assert it wasn't overwritten by the escape attempt.
+    baseA = tmp_path / "baseA.xml"
+    pre = baseA.read_bytes()
+
+    out_dir = tmp_path / "out"
+    with open_mcmc(mcmc_independent_run_with_bases) as run:
+        with pytest.raises(ValueError, match="outside out_dir"):
+            run.write_parameter_files(
+                np.array([0.5, 0.7]),
+                out_dir,
+                name_format="../{stem}.xml",
+            )
+    # The fixture file was not overwritten.
+    assert baseA.read_bytes() == pre
+
+
+def test_write_parameter_files_rejects_absolute_path(
+    mcmc_independent_run_with_bases, tmp_path
+):
+    """An absolute name_format must not write to that absolute location."""
+    out_dir = tmp_path / "out"
+    target = tmp_path / "elsewhere.xml"
+    with open_mcmc(mcmc_independent_run_with_bases) as run:
+        with pytest.raises(ValueError, match="outside out_dir"):
+            run.write_parameter_files(
+                np.array([0.0, 0.0]),
+                out_dir,
+                name_format=str(target),
+            )
+    assert not target.exists()

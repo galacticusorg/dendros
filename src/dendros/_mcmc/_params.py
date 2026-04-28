@@ -287,6 +287,7 @@ def emit_parameter_files(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir_resolved = out_dir.resolve()
 
     if name_format is None:
         name_format = "{stem}.xml" if len(leaves) == 1 else "{leaf_index:02d}_{stem}.xml"
@@ -301,7 +302,18 @@ def emit_parameter_files(
             parameter_map=leaf.parameter_map,
         )
         stem = Path(leaf.base_parameters_file).stem
-        out_path = out_dir / name_format.format(leaf_index=i, stem=stem)
+        formatted = name_format.format(leaf_index=i, stem=stem)
+        out_path = (out_dir / formatted)
+        # Containment check: refuse to write outside out_dir, regardless of
+        # whether name_format contained an absolute path or `..` segments.
+        try:
+            out_path.resolve().relative_to(out_dir_resolved)
+        except ValueError:
+            raise ValueError(
+                f"name_format={name_format!r} produced path "
+                f"{out_path} which resolves outside out_dir "
+                f"{out_dir_resolved}. Refusing to write."
+            ) from None
         write_parameter_file_to(tree, out_path)
         written.append((i, out_path.resolve()))
     return written
