@@ -2,10 +2,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Iterable, Optional, Sequence, Tuple, Union
+
+import numpy as np
 
 from ._chains import ChainSet, read_chains
 from ._config import MCMCConfig, ModelParameter, parse_mcmc_config
+from ._convergence import (
+    RhatResult,
+    convergence_step,
+    gelman_rubin,
+    geweke,
+    outlier_chains,
+)
 
 
 class MCMCRun:
@@ -45,6 +54,84 @@ class MCMCRun:
         if self._chains is None:
             self._chains = read_chains(self._config)
         return self._chains
+
+    # ------------------------------------------------------------------
+    # Convergence diagnostics
+    # ------------------------------------------------------------------
+
+    def gelman_rubin(
+        self,
+        *,
+        drop_chains: Sequence[int] = (),
+        step_grid: Optional[Sequence[int]] = None,
+        n_grid: int = 200,
+        min_steps: int = 10,
+        alpha_interval: float = 0.15,
+    ) -> RhatResult:
+        """Convenience wrapper around :func:`dendros.gelman_rubin`."""
+        return gelman_rubin(
+            self.chains,
+            drop_chains=drop_chains,
+            step_grid=step_grid,
+            n_grid=n_grid,
+            min_steps=min_steps,
+            alpha_interval=alpha_interval,
+        )
+
+    def convergence_step(
+        self,
+        *,
+        threshold: float = 1.1,
+        sustained_for: int = 1,
+        drop_chains: Sequence[int] = (),
+        step_grid: Optional[Sequence[int]] = None,
+        n_grid: int = 200,
+        min_steps: int = 10,
+    ) -> Optional[int]:
+        """First simulation-step count at which max-Rhat is sustained below *threshold*.
+
+        Computes a Gelman-Rubin trace via :meth:`gelman_rubin` and returns the
+        ``RhatResult.steps`` value at which convergence is first declared.
+        Returns ``None`` if convergence is never reached on the chosen grid.
+        """
+        result = self.gelman_rubin(
+            drop_chains=drop_chains,
+            step_grid=step_grid,
+            n_grid=n_grid,
+            min_steps=min_steps,
+        )
+        idx = convergence_step(
+            result.Rhat_c_max(),
+            threshold=threshold,
+            sustained_for=sustained_for,
+        )
+        if idx is None:
+            return None
+        return int(result.steps[idx])
+
+    def geweke(
+        self,
+        *,
+        first: float = 0.1,
+        last: float = 0.5,
+    ) -> np.ndarray:
+        """Convenience wrapper around :func:`dendros.geweke`."""
+        return geweke(self.chains, first=first, last=last)
+
+    def outlier_chains(
+        self,
+        *,
+        alpha: float = 0.05,
+        max_outliers: int = 10,
+        parameters: Optional[Iterable[str]] = None,
+    ) -> Tuple[int, ...]:
+        """Convenience wrapper around :func:`dendros.outlier_chains`."""
+        return outlier_chains(
+            self.chains,
+            alpha=alpha,
+            max_outliers=max_outliers,
+            parameters=parameters,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle

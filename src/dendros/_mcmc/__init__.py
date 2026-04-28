@@ -10,6 +10,13 @@ from ._config import (
     PriorSpec,
     parse_mcmc_config,
 )
+from ._convergence import (
+    RhatResult,
+    convergence_step,
+    gelman_rubin,
+    geweke,
+    outlier_chains,
+)
 from ._run import MCMCRun, open_mcmc
 
 __all__ = [
@@ -21,7 +28,12 @@ __all__ = [
     "ModelParameter",
     "PerturberSpec",
     "PriorSpec",
+    "RhatResult",
+    "convergence_step",
+    "gelman_rubin",
+    "geweke",
     "open_mcmc",
+    "outlier_chains",
     "parse_mcmc_config",
     "read_chains",
 ]

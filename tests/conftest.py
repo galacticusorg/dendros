@@ -367,6 +367,54 @@ def _write_chain_file(
             fh.write(" ".join(row) + "\n")
 
 
+def _build_chain_set(parameter_names, chain_states, *, simulation_kind="differentialEvolution"):
+    """Build a :class:`ChainSet` from in-memory state arrays for analysis tests.
+
+    *parameter_names* is a sequence of strings; *chain_states* is a sequence of
+    ``(n_steps, n_params)`` arrays — one per chain.  All other chain fields
+    (step, eval_time, log_posterior, log_likelihood, converged) are filled in
+    with simple placeholder values.
+    """
+    from pathlib import Path
+
+    from dendros._mcmc._chains import Chain, ChainSet
+    from dendros._mcmc._config import MCMCConfig, ModelParameter
+
+    parameters = tuple(
+        ModelParameter(name=name, mapper="identity") for name in parameter_names
+    )
+    config = MCMCConfig(
+        config_path=Path("/synthetic/config.xml"),
+        log_file_root=Path("/synthetic/chains"),
+        simulation_kind=simulation_kind,
+        parameters=parameters,
+        likelihood=None,
+    )
+    chains = []
+    for rank, state in enumerate(chain_states):
+        state = np.asarray(state, dtype=float)
+        n = state.shape[0]
+        chains.append(
+            Chain(
+                chain_index=rank,
+                path=Path(f"/synthetic/chains_{rank:04d}.log"),
+                step=np.arange(1, n + 1, dtype=np.int64),
+                eval_time=np.zeros(n, dtype=float),
+                converged=np.zeros(n, dtype=bool),
+                log_posterior=np.zeros(n, dtype=float),
+                log_likelihood=np.zeros(n, dtype=float),
+                state=state,
+            )
+        )
+    return ChainSet(config, chains)
+
+
+@pytest.fixture()
+def build_chain_set():
+    """Test-local factory for constructing a :class:`ChainSet` from arrays."""
+    return _build_chain_set
+
+
 @pytest.fixture()
 def mcmc_de_run(tmp_path):
     """A two-rank differential-evolution MCMC run with two parameters and headerless chains."""
