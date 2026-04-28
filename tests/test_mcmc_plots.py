@@ -8,10 +8,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-corner = pytest.importorskip("corner")
 matplotlib = pytest.importorskip("matplotlib")
-matplotlib.use("Agg")  # headless backend for tests
+matplotlib.use("Agg", force=True)  # headless backend for tests
 import matplotlib.pyplot as plt  # noqa: E402
+corner = pytest.importorskip("corner")
 
 from dendros import corner_plot, open_mcmc  # noqa: E402
 from dendros._mcmc._chains import Chain, ChainSet  # noqa: E402

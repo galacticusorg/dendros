@@ -147,7 +147,6 @@ def autocorrelation_time(
     from ._convergence import _resolve_post_burn
 
     burn = _resolve_post_burn(chains, post_burn)
-    n_chains = len(chains)
     n_params = chains.n_params
     n_min = min(c.n_steps - burn for c in chains)
     if n_min < 2:

@@ -126,6 +126,7 @@ class MVNFit:
         tree = ET.ElementTree(root)
         ET.indent(tree, space="  ")
         out = Path(out_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
         tree.write(out, encoding="utf-8", xml_declaration=True)
         return out.resolve()
 
