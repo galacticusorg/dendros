@@ -503,6 +503,109 @@ def mcmc_independent_config(tmp_path):
     return str(path)
 
 
+_BASE_PARAMETERS_SIMPLE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<parameters>
+  <p>
+    <a value="0.0"/>
+    <b value="0.0"/>
+  </p>
+</parameters>
+"""
+
+
+_BASE_PARAMETERS_SELECTORS = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<parameters>
+  <nodeOperator>
+    <nodeOperator value="stellarFeedbackDisks">
+      <stellarFeedback value="vWind">
+        <velocityCharacteristic value="0.0"/>
+      </stellarFeedback>
+    </nodeOperator>
+    <nodeOperator value="darkMatterProfileShape">
+      <shape value="1.0"/>
+    </nodeOperator>
+  </nodeOperator>
+  <multi>
+    <slot value="0.0"/>
+    <slot value="0.0"/>
+    <slot value="0.0"/>
+  </multi>
+</parameters>
+"""
+
+
+@pytest.fixture()
+def mcmc_de_run_with_base(tmp_path):
+    """Like mcmc_de_run, but also writes a real base parameter file."""
+    config_path = _write_mcmc_config(
+        tmp_path,
+        parameters=[
+            {"name": "p/a", "label": "a", "lo": 0.0, "hi": 1.0},
+            {"name": "p/b", "lo": -1.0, "hi": 1.0},
+        ],
+        log_root="chains",
+        base_params="base.xml",
+    )
+    (tmp_path / "base.xml").write_text(_BASE_PARAMETERS_SIMPLE)
+    rng = np.random.default_rng(7)
+    for rank in (0, 1):
+        states = rng.normal(size=(5, 2))
+        logp = rng.normal(size=5)
+        logl = logp - 1.0
+        _write_chain_file(
+            tmp_path / f"chains_{rank:04d}.log",
+            rank=rank,
+            states=states,
+            log_posteriors=logp,
+            log_likelihoods=logl,
+        )
+    return str(config_path)
+
+
+@pytest.fixture()
+def mcmc_independent_run_with_bases(tmp_path):
+    """Independent-likelihoods config with two real base parameter files."""
+    cfg = tmp_path / "indepConfig.xml"
+    cfg.write_text(_MCMC_INDEPENDENT_TEMPLATE)
+    (tmp_path / "baseA.xml").write_text(
+        '<?xml version="1.0"?><parameters><alpha value="0.0"/></parameters>'
+    )
+    (tmp_path / "baseB.xml").write_text(
+        '<?xml version="1.0"?><parameters>'
+        '<alpha value="0.0"/><beta value="0.0"/>'
+        "</parameters>"
+    )
+    rng = np.random.default_rng(8)
+    for rank in (0, 1):
+        states = rng.normal(size=(5, 2))
+        _write_chain_file(
+            tmp_path / f"indep_{rank:04d}.log",
+            rank=rank,
+            states=states,
+            log_posteriors=rng.normal(size=5),
+            log_likelihoods=rng.normal(size=5),
+        )
+    return str(cfg)
+
+
+@pytest.fixture()
+def base_parameters_simple(tmp_path):
+    """Simple base parameter file path (a/p, a/b leaves)."""
+    p = tmp_path / "base_simple.xml"
+    p.write_text(_BASE_PARAMETERS_SIMPLE)
+    return p
+
+
+@pytest.fixture()
+def base_parameters_selectors(tmp_path):
+    """Base parameter file exercising [@value='...'] and [N] selectors."""
+    p = tmp_path / "base_selectors.xml"
+    p.write_text(_BASE_PARAMETERS_SELECTORS)
+    return p
+
+
 @pytest.fixture()
 def mpi_files(tmp_path):
     """Two MPI-split files that together cover one output."""

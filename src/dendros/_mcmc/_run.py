@@ -26,6 +26,12 @@ from ._convergence import (
     outlier_chains,
 )
 from ._mvn_reparam import MVNFit, multivariate_normal_fit
+from ._params import (
+    apply_state,
+    emit_parameter_files,
+    read_parameter_file,
+    write_parameter_file_to,
+)
 from ._projection import ProjectionPursuitResult, projection_pursuit
 
 
@@ -243,6 +249,105 @@ class MCMCRun:
         """Convenience wrapper around :func:`dendros.multivariate_normal_fit`."""
         return multivariate_normal_fit(
             self.chains, post_burn=post_burn, drop_chains=drop_chains
+        )
+
+    # ------------------------------------------------------------------
+    # Parameter-file emission
+    # ------------------------------------------------------------------
+
+    def write_parameter_file(
+        self,
+        state,
+        out_path,
+        *,
+        likelihood_index: int = 0,
+    ):
+        """Emit a single Galacticus parameter file for one likelihood leaf.
+
+        Reads ``leaves[likelihood_index].base_parameters_file``, applies the
+        leaf's ``parameter_map`` (or the full state when no map is set), and
+        writes the result to *out_path*.
+
+        Parameters
+        ----------
+        state:
+            ``(n_params,)`` state vector in physical (model) space.  Galacticus
+            stores chain rows in physical space, so a row from
+            :meth:`maximum_posterior` / :meth:`posterior_samples` can be passed
+            directly.
+        out_path:
+            Output path.  Parent directory is created if missing.
+        likelihood_index:
+            Which leaf of the likelihood tree to use.  Defaults to ``0``.
+
+        Returns
+        -------
+        pathlib.Path
+            Resolved output path.
+        """
+        if self._config.likelihood is None:
+            raise ValueError(
+                "Config has no <posteriorSampleLikelihood>; cannot emit a "
+                "parameter file."
+            )
+        leaves = self._config.likelihood.leaves()
+        if likelihood_index < 0 or likelihood_index >= len(leaves):
+            raise IndexError(
+                f"likelihood_index={likelihood_index!r} out of range; "
+                f"this run has {len(leaves)} leaf likelihoods."
+            )
+        leaf = leaves[likelihood_index]
+        if leaf.base_parameters_file is None:
+            raise ValueError(
+                f"Likelihood leaf {likelihood_index!r} has no "
+                "<baseParametersFileName>; cannot emit a parameter file."
+            )
+
+        state_arr = np.asarray(state, dtype=float)
+        tree = read_parameter_file(leaf.base_parameters_file)
+        apply_state(
+            tree,
+            self._config.parameters,
+            state_arr,
+            parameter_map=leaf.parameter_map,
+        )
+        return write_parameter_file_to(tree, out_path)
+
+    def write_parameter_files(
+        self,
+        state,
+        out_dir,
+        *,
+        name_format: Optional[str] = None,
+    ):
+        """Emit one parameter file per likelihood leaf into *out_dir*.
+
+        For ``independentLikelihoods`` configs each leaf has its own
+        ``baseParametersFileName`` and ``parameterMap``; this writes one
+        file per leaf, with each file's filename derived from the base file's
+        stem.
+
+        Parameters
+        ----------
+        state:
+            ``(n_params,)`` state vector in physical space.
+        out_dir:
+            Output directory (created if missing).
+        name_format:
+            Output-filename format string accepting ``leaf_index`` and
+            ``stem``.  Defaults to ``"{stem}.xml"`` for a single leaf and
+            ``"{leaf_index:02d}_{stem}.xml"`` for multiple.
+
+        Returns
+        -------
+        list of (leaf_index, pathlib.Path)
+            One entry per leaf, in document order.
+        """
+        return emit_parameter_files(
+            np.asarray(state, dtype=float),
+            self._config,
+            out_dir,
+            name_format=name_format,
         )
 
     # ------------------------------------------------------------------

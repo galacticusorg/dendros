@@ -32,6 +32,13 @@ from ._convergence import (
     outlier_chains,
 )
 from ._mvn_reparam import MVNFit, multivariate_normal_fit
+from ._params import (
+    apply_state,
+    emit_parameter_files,
+    read_parameter_file,
+    resolve_parameter_path,
+    write_parameter_file_to,
+)
 from ._projection import ProjectionPursuitResult, projection_pursuit
 from ._run import MCMCRun, open_mcmc
 
@@ -51,10 +58,12 @@ __all__ = [
     "RhatResult",
     "acceptance_rate",
     "acceptance_rate_trace",
+    "apply_state",
     "autocorrelation_function",
     "autocorrelation_time",
     "convergence_step",
     "effective_sample_size",
+    "emit_parameter_files",
     "gelman_rubin",
     "geweke",
     "maximum_likelihood",
@@ -66,4 +75,7 @@ __all__ = [
     "posterior_samples",
     "projection_pursuit",
     "read_chains",
+    "read_parameter_file",
+    "resolve_parameter_path",
+    "write_parameter_file_to",
 ]
