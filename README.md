@@ -9,7 +9,8 @@
 [![Documentation](https://readthedocs.org/projects/dendros/badge/?version=latest)](https://dendros.readthedocs.io/en/latest/)
 
 A Python toolkit for analyzing [Galacticus](https://github.com/galacticusorg/galacticus)
-semi-analytic model outputs.
+semi-analytic model outputs — both HDF5 model outputs and posterior-sample
+("MCMC") chain logs.
 
 ---
 
@@ -202,6 +203,41 @@ For lightcone runs the top-level group is typically `Lightcone` rather than
 ```python
 c = open_outputs("lightcone.hdf5", output_root="Lightcone")
 ```
+
+---
+
+## MCMC analysis
+
+Dendros also reads Galacticus posterior-sample ("MCMC") chain logs given
+the config XML used to drive the run, and provides convergence
+diagnostics, post-burn analyses, parameter-file emission, and corner
+plots:
+
+```python
+from dendros import open_mcmc
+
+with open_mcmc("mcmcConfig.xml") as run:
+    outliers = run.outlier_chains()
+    step = run.convergence_step(threshold=1.1, drop_chains=outliers)
+
+    ess = run.effective_sample_size(post_burn=step)
+    fit = run.multivariate_normal_fit(post_burn=step, drop_chains=outliers)
+    fit.write_reparameterization_config("reparam.xml")
+
+    map_ = run.maximum_posterior(drop_chains=outliers)
+    run.write_parameter_files(map_.state, "max_posterior")
+
+    fig = run.corner_plot(post_burn=step, drop_chains=outliers)
+```
+
+Brooks-Gelman corrected Rhat (with the non-parametric R_interval companion),
+Geweke z-scores, an iterative Grubbs outlier test on chain final states,
+Sokal-windowed autocorrelation times, effective sample sizes, sliding-window
+acceptance rates, projection-pursuit PCA, multivariate-normal fits with
+reparameterization-config emission, posterior sampling, and base-parameter
+file generation are all supported.  Corner plots require the optional
+extra: `pip install 'dendros[mcmc]'`.  See the [MCMC docs page](https://dendros.readthedocs.io/en/latest/mcmc.html)
+for details.
 
 ---
 

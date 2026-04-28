@@ -32,6 +32,7 @@ from ._params import (
     read_parameter_file,
     write_parameter_file_to,
 )
+from ._plots import corner_plot
 from ._projection import ProjectionPursuitResult, projection_pursuit
 
 
@@ -312,6 +313,25 @@ class MCMCRun:
             parameter_map=leaf.parameter_map,
         )
         return write_parameter_file_to(tree, out_path)
+
+    def corner_plot(
+        self,
+        *,
+        parameters: Optional[Iterable[str]] = None,
+        post_burn: Optional[int] = None,
+        drop_chains: Sequence[int] = (),
+        labels: Optional[Sequence[str]] = None,
+        **corner_kwargs,
+    ):
+        """Convenience wrapper around :func:`dendros.corner_plot`."""
+        return corner_plot(
+            self.chains,
+            parameters=parameters,
+            post_burn=post_burn,
+            drop_chains=drop_chains,
+            labels=labels,
+            **corner_kwargs,
+        )
 
     def write_parameter_files(
         self,

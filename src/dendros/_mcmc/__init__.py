@@ -39,6 +39,7 @@ from ._params import (
     resolve_parameter_path,
     write_parameter_file_to,
 )
+from ._plots import corner_plot
 from ._projection import ProjectionPursuitResult, projection_pursuit
 from ._run import MCMCRun, open_mcmc
 
@@ -62,6 +63,7 @@ __all__ = [
     "autocorrelation_function",
     "autocorrelation_time",
     "convergence_step",
+    "corner_plot",
     "effective_sample_size",
     "emit_parameter_files",
     "gelman_rubin",
