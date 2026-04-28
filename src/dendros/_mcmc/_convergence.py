@@ -1,6 +1,7 @@
 """MCMC convergence diagnostics: Gelman-Rubin, Geweke, outlier-chain detection."""
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence, Tuple
 
@@ -447,3 +448,50 @@ def outlier_chains(
 
     flagged_rows = iterative_grubbs(points, alpha=alpha, max_outliers=max_outliers)
     return tuple(int(chains[i].chain_index) for i in flagged_rows)
+
+
+# ---------------------------------------------------------------------------
+# Burn-in resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_post_burn(chains: ChainSet, post_burn: Optional[int]) -> int:
+    """Resolve a ``post_burn`` argument: ``None`` triggers convergence detection.
+
+    When *post_burn* is ``None``, runs :func:`gelman_rubin` with default
+    settings on *chains* and returns the step count from
+    :func:`convergence_step` at threshold ``1.1`` and ``sustained_for=1``.
+    If convergence is not reached on the default grid (or if the chain set is
+    too small for Gelman-Rubin), a :class:`UserWarning` is emitted and ``0``
+    is returned so the caller can proceed with the full chain.
+
+    Returns
+    -------
+    int
+        Number of leading rows to drop in each chain.
+    """
+    if post_burn is not None:
+        if post_burn < 0:
+            raise ValueError(f"post_burn must be non-negative; got {post_burn!r}")
+        return int(post_burn)
+
+    try:
+        result = gelman_rubin(chains)
+    except ValueError as exc:
+        warnings.warn(
+            f"Auto burn-in detection failed ({exc}); using post_burn=0.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return 0
+    idx = convergence_step(result.Rhat_c_max())
+    if idx is None:
+        warnings.warn(
+            "Auto burn-in detection did not find convergence on the default "
+            "grid; using post_burn=0.  Pass an explicit post_burn= to silence "
+            "this warning.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return 0
+    return int(result.steps[idx])

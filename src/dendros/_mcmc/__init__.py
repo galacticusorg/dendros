@@ -1,6 +1,12 @@
 """MCMC support for Dendros: read Galacticus posterior-sample chain files and analyze them."""
 from __future__ import annotations
 
+from ._analysis import acceptance_rate, acceptance_rate_trace
+from ._autocorr import (
+    autocorrelation_function,
+    autocorrelation_time,
+    effective_sample_size,
+)
 from ._chains import Chain, ChainSet, read_chains
 from ._config import (
     Likelihood,
@@ -29,7 +35,12 @@ __all__ = [
     "PerturberSpec",
     "PriorSpec",
     "RhatResult",
+    "acceptance_rate",
+    "acceptance_rate_trace",
+    "autocorrelation_function",
+    "autocorrelation_time",
     "convergence_step",
+    "effective_sample_size",
     "gelman_rubin",
     "geweke",
     "open_mcmc",

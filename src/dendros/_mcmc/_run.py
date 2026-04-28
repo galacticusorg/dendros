@@ -6,6 +6,8 @@ from typing import Iterable, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from ._analysis import acceptance_rate, acceptance_rate_trace
+from ._autocorr import autocorrelation_time, effective_sample_size
 from ._chains import ChainSet, read_chains
 from ._config import MCMCConfig, ModelParameter, parse_mcmc_config
 from ._convergence import (
@@ -132,6 +134,45 @@ class MCMCRun:
             max_outliers=max_outliers,
             parameters=parameters,
         )
+
+    # ------------------------------------------------------------------
+    # Mixing diagnostics
+    # ------------------------------------------------------------------
+
+    def acceptance_rate(
+        self,
+        *,
+        post_burn: Optional[int] = None,
+    ) -> np.ndarray:
+        """Convenience wrapper around :func:`dendros.acceptance_rate`."""
+        return acceptance_rate(self.chains, post_burn=post_burn)
+
+    def acceptance_rate_trace(
+        self,
+        *,
+        window: int = 30,
+        post_burn: int = 0,
+    ):
+        """Convenience wrapper around :func:`dendros.acceptance_rate_trace`."""
+        return acceptance_rate_trace(self.chains, window=window, post_burn=post_burn)
+
+    def autocorrelation_time(
+        self,
+        *,
+        post_burn: Optional[int] = None,
+        c: float = 5.0,
+    ) -> np.ndarray:
+        """Convenience wrapper around :func:`dendros.autocorrelation_time`."""
+        return autocorrelation_time(self.chains, post_burn=post_burn, c=c)
+
+    def effective_sample_size(
+        self,
+        *,
+        post_burn: Optional[int] = None,
+        c: float = 5.0,
+    ) -> np.ndarray:
+        """Convenience wrapper around :func:`dendros.effective_sample_size`."""
+        return effective_sample_size(self.chains, post_burn=post_burn, c=c)
 
     # ------------------------------------------------------------------
     # Lifecycle
