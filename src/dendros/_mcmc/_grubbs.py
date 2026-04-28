@@ -1,10 +1,31 @@
-"""Iterative two-sided Grubbs test for chain-final-state outlier detection."""
+"""Iterative two-sided Grubbs test for chain-final-state outlier detection.
+
+Requires :mod:`scipy.stats` for the inverse Student-t quantile.  ``scipy`` is
+not a required dependency of Dendros itself — it lives in the ``mcmc``
+optional extra alongside ``corner`` / ``matplotlib`` — so the import is
+deferred and a clear :class:`ImportError` is surfaced when the function is
+called without it installed.
+"""
 from __future__ import annotations
 
 from typing import List, Tuple
 
 import numpy as np
-from scipy.stats import t as _student_t
+
+
+def _import_student_t():
+    """Defer the ``scipy.stats.t`` import until first use.
+
+    Raises a clear :class:`ImportError` if :mod:`scipy` is missing.
+    """
+    try:
+        from scipy.stats import t as student_t
+    except ImportError as exc:
+        raise ImportError(
+            "outlier_chains / Grubbs requires the optional `scipy` package. "
+            "Install it with: pip install 'dendros[mcmc]'."
+        ) from exc
+    return student_t
 
 
 def grubbs_critical_value(n: int, alpha: float) -> float:
@@ -31,7 +52,8 @@ def grubbs_critical_value(n: int, alpha: float) -> float:
     """
     if n < 3:
         raise ValueError(f"Grubbs test requires n >= 3; got n={n}")
-    t_quantile = _student_t.ppf(1.0 - alpha / (2.0 * n), n - 2)
+    student_t = _import_student_t()
+    t_quantile = student_t.ppf(1.0 - alpha / (2.0 * n), n - 2)
     return float(
         (n - 1) / np.sqrt(n) * np.sqrt(t_quantile**2 / (n - 2 + t_quantile**2))
     )

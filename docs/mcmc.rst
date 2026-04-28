@@ -55,6 +55,15 @@ chain's most recent state:
    outliers = run.outlier_chains()       # tuple of chain_index values
    step = run.convergence_step(drop_chains=outliers)
 
+Grubbs requires the inverse Student-t quantile from :mod:`scipy.stats`, which
+ships with the optional ``mcmc`` extra alongside ``corner`` and
+``matplotlib``::
+
+    pip install 'dendros[mcmc]'
+
+A clear :class:`ImportError` is raised if ``outlier_chains`` is called
+without ``scipy`` installed.
+
 All post-burn methods accept ``post_burn=None`` (the default), which runs
 :meth:`~dendros.MCMCRun.gelman_rubin` and :meth:`~dendros.MCMCRun.convergence_step`
 internally to pick a burn point.  Pass an explicit integer for full control.
@@ -138,7 +147,9 @@ LaTeX labels derived from the config.
    fig = run.corner_plot(post_burn=step)
    fig = run.corner_plot(parameters=["alpha", "beta"], post_burn=step)
 
-Install the optional dependencies (``corner`` and ``matplotlib``) via::
+The optional ``mcmc`` extra (``scipy``, ``corner``, ``matplotlib``) is
+required for both :meth:`~dendros.MCMCRun.outlier_chains` and
+:meth:`~dendros.MCMCRun.corner_plot`::
 
     pip install 'dendros[mcmc]'
 

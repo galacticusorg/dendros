@@ -78,6 +78,22 @@ def test_iterative_grubbs_respects_max_outliers():
     assert len(flagged) == 2
 
 
+def test_grubbs_raises_clear_error_without_scipy(monkeypatch):
+    """When scipy is missing, the user should see a clean ImportError pointing
+    at the optional `mcmc` extra."""
+    from dendros._mcmc import _grubbs
+
+    def _missing():
+        raise ImportError(
+            "outlier_chains / Grubbs requires the optional `scipy` package. "
+            "Install it with: pip install 'dendros[mcmc]'."
+        )
+
+    monkeypatch.setattr(_grubbs, "_import_student_t", _missing)
+    with pytest.raises(ImportError, match=r"dendros\[mcmc\]"):
+        grubbs_critical_value(10, alpha=0.05)
+
+
 # ---------------------------------------------------------------------------
 # Gelman-Rubin
 # ---------------------------------------------------------------------------
