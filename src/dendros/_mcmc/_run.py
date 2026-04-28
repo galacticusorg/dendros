@@ -6,7 +6,15 @@ from typing import Iterable, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from ._analysis import acceptance_rate, acceptance_rate_trace
+from ._analysis import (
+    MaxResult,
+    PosteriorSamples,
+    acceptance_rate,
+    acceptance_rate_trace,
+    maximum_likelihood,
+    maximum_posterior,
+    posterior_samples,
+)
 from ._autocorr import autocorrelation_time, effective_sample_size
 from ._chains import ChainSet, read_chains
 from ._config import MCMCConfig, ModelParameter, parse_mcmc_config
@@ -17,6 +25,8 @@ from ._convergence import (
     geweke,
     outlier_chains,
 )
+from ._mvn_reparam import MVNFit, multivariate_normal_fit
+from ._projection import ProjectionPursuitResult, projection_pursuit
 
 
 class MCMCRun:
@@ -173,6 +183,67 @@ class MCMCRun:
     ) -> np.ndarray:
         """Convenience wrapper around :func:`dendros.effective_sample_size`."""
         return effective_sample_size(self.chains, post_burn=post_burn, c=c)
+
+    # ------------------------------------------------------------------
+    # Max-posterior / sampling / projection / MVN fit
+    # ------------------------------------------------------------------
+
+    def maximum_posterior(
+        self,
+        *,
+        drop_chains: Sequence[int] = (),
+    ) -> MaxResult:
+        """Convenience wrapper around :func:`dendros.maximum_posterior`."""
+        return maximum_posterior(self.chains, drop_chains=drop_chains)
+
+    def maximum_likelihood(
+        self,
+        *,
+        drop_chains: Sequence[int] = (),
+    ) -> MaxResult:
+        """Convenience wrapper around :func:`dendros.maximum_likelihood`."""
+        return maximum_likelihood(self.chains, drop_chains=drop_chains)
+
+    def posterior_samples(
+        self,
+        n: int,
+        *,
+        post_burn: Optional[int] = None,
+        drop_chains: Sequence[int] = (),
+        rng: Optional[np.random.Generator] = None,
+        replace: Optional[bool] = None,
+    ) -> PosteriorSamples:
+        """Convenience wrapper around :func:`dendros.posterior_samples`."""
+        return posterior_samples(
+            self.chains,
+            n,
+            post_burn=post_burn,
+            drop_chains=drop_chains,
+            rng=rng,
+            replace=replace,
+        )
+
+    def projection_pursuit(
+        self,
+        *,
+        post_burn: Optional[int] = None,
+        drop_chains: Sequence[int] = (),
+    ) -> ProjectionPursuitResult:
+        """Convenience wrapper around :func:`dendros.projection_pursuit`."""
+        return projection_pursuit(
+            self.chains, post_burn=post_burn, drop_chains=drop_chains
+        )
+
+    def multivariate_normal_fit(
+        self,
+        *,
+        post_burn: Optional[int] = None,
+        drop_chains: Sequence[int] = (),
+    ) -> MVNFit:
+        """Convenience wrapper around :func:`dendros.multivariate_normal_fit`."""
+        return multivariate_normal_fit(
+            self.chains, post_burn=post_burn, drop_chains=drop_chains
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
