@@ -478,6 +478,45 @@ class Collection:
         )
 
     # ------------------------------------------------------------------
+    # Analyses
+    # ------------------------------------------------------------------
+
+    def list_analyses(self, format: str = "astropy"):
+        """Return a table of ``function1D`` analyses in ``/analyses``.
+
+        Convenience wrapper around :func:`dendros.list_analyses`.
+        """
+        from ._analyses import list_analyses
+
+        return list_analyses(self, format=format)
+
+    def plot_analyses(
+        self,
+        name=None,
+        output_directory=None,
+        *,
+        show_target: bool = True,
+        figsize=(7.0, 5.0),
+        dpi: int = 120,
+        file_format: str = "pdf",
+    ):
+        """Plot ``function1D`` analyses from ``/analyses``.
+
+        Convenience wrapper around :func:`dendros.plot_analyses`.
+        """
+        from ._analyses import plot_analyses
+
+        return plot_analyses(
+            self,
+            name=name,
+            output_directory=output_directory,
+            show_target=show_target,
+            figsize=figsize,
+            dpi=dpi,
+            file_format=file_format,
+        )
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 

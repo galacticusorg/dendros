@@ -1,6 +1,7 @@
 """Dendros: a Python toolkit for analyzing Galacticus semi-analytic model outputs."""
 from __future__ import annotations
 
+from ._analyses import list_analyses, plot_analyses
 from ._collection import Collection, open_outputs
 from ._galaxy_history import trace_galaxy_history
 from ._mcmc import (
@@ -50,6 +51,9 @@ __all__ = [
     "Chain",
     "ChainSet",
     "Collection",
+    "open_outputs",
+    "list_analyses",
+    "plot_analyses",
     "Likelihood",
     "MCMCConfig",
     "MCMCRun",
