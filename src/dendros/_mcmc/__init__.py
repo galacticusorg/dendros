@@ -1,63 +1,57 @@
-"""Dendros: a Python toolkit for analyzing Galacticus semi-analytic model outputs."""
+"""MCMC support for Dendros: read Galacticus posterior-sample chain files and analyze them."""
 from __future__ import annotations
 
-from ._collection import Collection, open_outputs
-from ._galaxy_history import trace_galaxy_history
-from ._mcmc import (
-    Chain,
-    ChainSet,
-    Likelihood,
-    MCMCConfig,
-    MCMCRun,
-    MVNFit,
+from ._analysis import (
     MaxResult,
-    ModelParameter,
-    PerturberSpec,
     PosteriorSamples,
-    PriorSpec,
-    ProjectionPursuitResult,
-    RhatResult,
     acceptance_rate,
     acceptance_rate_trace,
-    apply_state,
-    autocorrelation_function,
-    autocorrelation_time,
-    convergence_step,
-    corner_plot,
-    effective_sample_size,
-    emit_parameter_files,
-    gelman_rubin,
-    geweke,
     maximum_likelihood,
     maximum_posterior,
-    multivariate_normal_fit,
-    open_mcmc,
-    outlier_chains,
-    parse_mcmc_config,
     posterior_samples,
-    projection_pursuit,
-    read_chains,
+)
+from ._autocorr import (
+    autocorrelation_function,
+    autocorrelation_time,
+    effective_sample_size,
+)
+from ._chains import Chain, ChainSet, read_chains
+from ._config import (
+    Likelihood,
+    MCMCConfig,
+    ModelParameter,
+    PerturberSpec,
+    PriorSpec,
+    parse_mcmc_config,
+)
+from ._convergence import (
+    RhatResult,
+    convergence_step,
+    gelman_rubin,
+    geweke,
+    outlier_chains,
+)
+from ._mvn_reparam import MVNFit, multivariate_normal_fit
+from ._params import (
+    apply_state,
+    emit_parameter_files,
     read_parameter_file,
     resolve_parameter_path,
     write_parameter_file_to,
 )
-from ._outputs import OutputIndex, OutputMeta
-from ._star_formation import sfh_collapse_metallicities, sfh_times
-
-__version__ = "0.2.0"
+from ._plots import corner_plot
+from ._projection import ProjectionPursuitResult, projection_pursuit
+from ._run import MCMCRun, open_mcmc
 
 __all__ = [
     "Chain",
     "ChainSet",
-    "Collection",
     "Likelihood",
     "MCMCConfig",
     "MCMCRun",
     "MVNFit",
     "MaxResult",
     "ModelParameter",
-    "OutputIndex",
-    "OutputMeta",
     "PerturberSpec",
     "PosteriorSamples",
     "PriorSpec",
@@ -78,7 +72,6 @@ __all__ = [
     "maximum_posterior",
     "multivariate_normal_fit",
     "open_mcmc",
-    "open_outputs",
     "outlier_chains",
     "parse_mcmc_config",
     "posterior_samples",
@@ -86,8 +79,5 @@ __all__ = [
     "read_chains",
     "read_parameter_file",
     "resolve_parameter_path",
-    "sfh_collapse_metallicities",
-    "sfh_times",
-    "trace_galaxy_history",
     "write_parameter_file_to",
 ]

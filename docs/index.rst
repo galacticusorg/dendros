@@ -9,13 +9,15 @@ Welcome to Dendros
 
 **Dendros** is a Python toolkit for reading and analyzing
 `Galacticus <https://github.com/galacticusorg/galacticus>`_
-semi-analytic model outputs stored in HDF5 files.
+semi-analytic model outputs — both HDF5 model outputs and posterior-sample
+("MCMC") chain logs.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents
 
    quickstart
+   mcmc
    api
 
 Indices and tables
