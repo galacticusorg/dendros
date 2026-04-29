@@ -25,6 +25,12 @@ To also enable pandas and tabulate table output:
 pip install 'dendros[pandas,tabulate]'
 ```
 
+To enable plotting of Galacticus `/analyses` results (requires matplotlib):
+
+```bash
+pip install 'dendros[plot]'
+```
+
 Install the latest development version directly from GitHub:
 
 ```bash
@@ -169,6 +175,26 @@ with open_outputs("galacticus.hdf5") as c:
     print(grp.attrs)                       # group attributes
     ds = c["Outputs/Output1/nodeData/basicMass"]
     print(ds.dtype, ds.shape)
+```
+
+### Plotting analyses
+
+If a Galacticus run was configured to write reduced analysis results, the
+HDF5 file will contain a top-level `/analyses` group with one subgroup per
+analysis.  Dendros can list those analyses and plot each model curve with
+its observational/target overlay.  Requires the `[plot]` extra.
+
+For MPI runs, the `/analyses` data is reduced over all ranks and is
+identical in every rank's file, so dendros reads only the primary file.
+
+```python
+with open_outputs("galacticus.hdf5") as c:
+    print(c.list_analyses())                     # tabulate available analyses
+
+    figs = c.plot_analyses()                     # one matplotlib Figure per analysis
+    figs = c.plot_analyses(name="stellarMassFunction",
+                           output_directory="figs",
+                           file_format="pdf")    # also save to disk
 ```
 
 ---

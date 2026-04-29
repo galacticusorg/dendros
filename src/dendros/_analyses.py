@@ -331,6 +331,11 @@ def _plot_one(
         ax.legend(frameon=False, loc="best")
         fig.tight_layout()
 
+    # Detach from pyplot's state machine so that returning many Figures from
+    # a notebook cell doesn't trigger duplicate inline-backend rendering and
+    # so callers don't accumulate memory.  The Figure itself remains valid:
+    # its axes, savefig, and IPython display all continue to work.
+    plt.close(fig)
     return fig
 
 
