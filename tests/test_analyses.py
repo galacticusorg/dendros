@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from dendros import open_outputs
-from dendros._analyses import _latex_fix
+from dendros._analyses import _latex_fix, _safe_filename
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +123,9 @@ def test_plot_analyses_writes_files(analyses_file, tmp_path):
     written = sorted(p.name for p in out.glob("*.pdf"))
     assert "simpleSMF.pdf" in written
     assert "withTarget.pdf" in written
-    assert "step1:chain1_inner.pdf" in written  # '/' replaced
+    # 'step1:chain1/inner' must be sanitized: both ':' and '/' become '_',
+    # then runs of '_' are collapsed.
+    assert "step1_chain1_inner.pdf" in written
     assert len(written) == len(figs)
 
 
@@ -188,6 +190,23 @@ def test_latex_fix_substitutions():
     # \le inside a longer command name is preserved.
     assert _latex_fix(r"\left(") == r"\left("
     assert _latex_fix("") == ""
+
+
+def test_safe_filename_replaces_unsafe_chars():
+    # POSIX path separator and Windows-invalid characters all collapse.
+    assert _safe_filename("a/b") == "a_b"
+    assert _safe_filename("step1:chain1/inner") == "step1_chain1_inner"
+    assert _safe_filename(r'na<m>e:"/\|?*') == "na_m_e_"
+    # Backslash specifically (Windows path separator).
+    assert _safe_filename("foo\\bar") == "foo_bar"
+    # ASCII control codes are stripped.
+    assert _safe_filename("a\x00b\tc") == "a_b_c"
+    # Trailing whitespace and dots (Windows silently strips these).
+    assert _safe_filename("name . ") == "name"
+    # Plain names pass through untouched.
+    assert _safe_filename("simpleSMF") == "simpleSMF"
+    # All-unsafe input doesn't yield an empty filename.
+    assert _safe_filename("///") == "_"
 
 
 def test_plot_missing_matplotlib_raises(analyses_file, monkeypatch):

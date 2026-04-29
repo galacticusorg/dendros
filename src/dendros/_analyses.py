@@ -147,6 +147,24 @@ def _resolve_errors(
     return None, None
 
 
+# Characters that are invalid in filenames on Windows (a strict superset of
+# POSIX's just-``/``).  ASCII control codes (0–31) are also invalid on
+# Windows; we strip them too.
+_UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _safe_filename(name: str) -> str:
+    """Make ``name`` safe to use as a single filename component on any OS.
+
+    Replaces filesystem-invalid characters (``< > : " / \\ | ? *`` and ASCII
+    control codes) with ``_``, collapses repeated ``_``, and strips trailing
+    whitespace and dots (Windows quietly removes those).
+    """
+    safe = _UNSAFE_FILENAME_CHARS.sub("_", name)
+    safe = re.sub(r"_+", "_", safe).rstrip(" .")
+    return safe or "_"
+
+
 _LATEX_FIXES = (
     (re.compile(r"\\hbox"), r"\\mathrm"),
     (re.compile(r"\\le(?![a-zA-Z])"), r"\\leq"),
@@ -435,7 +453,9 @@ def plot_analyses(
         )
         figs[n] = fig
         if out_dir is not None:
-            safe = n.replace("/", "_")
-            fig.savefig(out_dir / f"{safe}.{file_format}", format=file_format)
+            fig.savefig(
+                out_dir / f"{_safe_filename(n)}.{file_format}",
+                format=file_format,
+            )
 
     return figs
