@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 
@@ -207,6 +208,27 @@ def test_safe_filename_replaces_unsafe_chars():
     assert _safe_filename("simpleSMF") == "simpleSMF"
     # All-unsafe input doesn't yield an empty filename.
     assert _safe_filename("///") == "_"
+
+
+def test_attr_pointing_at_subgroup_raises(tmp_path):
+    """If e.g. yDataset points at a subgroup instead of a dataset, surface a
+    clear TypeError rather than h5py's confusing 'Group' object indexing
+    error."""
+    p = tmp_path / "malformed.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        f.create_group("Outputs/Output1").attrs["outputTime"] = 13.8
+        a = f.create_group("analyses").create_group("bad")
+        a.attrs["type"] = np.bytes_("function1D")
+        a.create_dataset("x", data=np.array([1.0, 2.0]))
+        a.attrs["xDataset"] = np.bytes_("x")
+        # yDataset points at a subgroup, not a dataset.
+        a.create_group("y_is_a_group")
+        a.attrs["yDataset"] = np.bytes_("y_is_a_group")
+
+    with open_outputs(str(p)) as c:
+        with pytest.raises(TypeError, match="not an h5py.Dataset"):
+            c.plot_analyses()
 
 
 def test_plot_missing_matplotlib_raises(analyses_file, monkeypatch):

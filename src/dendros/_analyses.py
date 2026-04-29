@@ -17,12 +17,12 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 
 from ._collection import _decode, _make_table
 
 if TYPE_CHECKING:
-    import h5py
     from matplotlib.figure import Figure
 
     from ._collection import Collection
@@ -104,14 +104,25 @@ def _attr_bool(group: "h5py.Group", key: str) -> bool:
 def _ds_by_attr(group: "h5py.Group", attr_key: str) -> Optional[np.ndarray]:
     """Return the dataset whose name is stored in ``group.attrs[attr_key]``.
 
-    Returns ``None`` if the attribute is missing or the dataset is absent.
+    Returns ``None`` if the attribute is missing or the named dataset is
+    absent.  Raises :class:`TypeError` if the attribute resolves to
+    something other than an ``h5py.Dataset`` (e.g. a subgroup) — that
+    indicates a malformed analysis group rather than missing data, so we
+    surface it loudly instead of silently returning ``None``.
     """
     if attr_key not in group.attrs:
         return None
     ds_name = _decode(group.attrs[attr_key])
     if not ds_name or ds_name not in group:
         return None
-    return np.asarray(group[ds_name][()])
+    obj = group[ds_name]
+    if not isinstance(obj, h5py.Dataset):
+        raise TypeError(
+            f"Analysis '{group.name}' attribute {attr_key!r} points at "
+            f"'{ds_name}', which is a {type(obj).__name__}, not an "
+            f"h5py.Dataset."
+        )
+    return np.asarray(obj[()])
 
 
 def _resolve_errors(
