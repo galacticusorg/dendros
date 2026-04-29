@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package and dev dependencies
-        run: pip install -e ".[dev,pandas]"
+        run: pip install -e ".[dev,pandas,plot,mcmc]"
 
       - name: Run tests with coverage
         run: pytest --cov=dendros --cov-report=term-missing

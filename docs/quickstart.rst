@@ -11,6 +11,9 @@ Installation
    # With optional pandas support:
    pip install 'dendros[pandas]'
 
+   # With matplotlib for plotting analyses:
+   pip install 'dendros[plot]'
+
    # Development version from GitHub:
    pip install git+https://github.com/galacticusorg/dendros.git
 
@@ -192,4 +195,37 @@ functions to collapse (sum) over metallicity:
        sfh = c["Outputs/Output1/nodeData/diskStarFormationHistoryMass"]
        sfh_times = sfh_times(sfh)
        sfh_collapsed = sfh_collapse_metallicities(sfh)
+
+Plotting analyses
+-----------------
+
+If a Galacticus run was configured to write reduced analysis results, the
+HDF5 file will contain a top-level ``/analyses`` group with one subgroup per
+analysis.  Dendros can list and plot every ``function1D`` analysis,
+overlaying the model curve with the observational/target data when
+present.  Requires the ``plot`` extra (``pip install 'dendros[plot]'``).
+
+For MPI runs, the ``/analyses`` data is reduced over all ranks and is
+identical in every rank's file, so dendros reads only the primary file.
+
+.. code-block:: python
+
+   from dendros import open_outputs
+
+   with open_outputs("galacticus.hdf5") as c:
+       # Tabulate available analyses (no matplotlib needed for this).
+       print(c.list_analyses())
+
+       # Plot every analysis; returns dict[name, matplotlib.figure.Figure].
+       figs = c.plot_analyses()
+
+       # Plot one analysis and also save to disk.
+       figs = c.plot_analyses(
+           name="stellarMassFunction",
+           output_directory="figs",
+           file_format="pdf",
+       )
+
+       # Hide the target overlay (model only).
+       figs = c.plot_analyses(show_target=False)
 
