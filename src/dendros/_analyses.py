@@ -206,10 +206,24 @@ def _read_analysis(group: "h5py.Group") -> Dict[str, object]:
         raise KeyError(
             f"Analysis '{group.name}' missing required xDataset or yDataset"
         )
+    if x.ndim != 1:
+        raise ValueError(
+            f"Analysis '{group.name}': xDataset must be 1D, got shape {x.shape}"
+        )
+    if y.shape != x.shape:
+        raise ValueError(
+            f"Analysis '{group.name}': yDataset shape {y.shape} does not "
+            f"match xDataset shape {x.shape}"
+        )
     y_err_lo, y_err_hi = _resolve_errors(group, y, target=False)
 
     y_target = _ds_by_attr(group, "yDatasetTarget")
     if y_target is not None:
+        if y_target.shape != x.shape:
+            raise ValueError(
+                f"Analysis '{group.name}': yDatasetTarget shape "
+                f"{y_target.shape} does not match xDataset shape {x.shape}"
+            )
         yt_err_lo, yt_err_hi = _resolve_errors(group, y_target, target=True)
     else:
         yt_err_lo = yt_err_hi = None

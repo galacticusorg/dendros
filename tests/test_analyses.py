@@ -210,6 +210,50 @@ def test_safe_filename_replaces_unsafe_chars():
     assert _safe_filename("///") == "_"
 
 
+def _write_minimal_analysis(path, *, x, y, y_target=None):
+    """Helper for shape-mismatch tests: build a one-analysis HDF5 file."""
+    with h5py.File(path, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        f.create_group("Outputs/Output1").attrs["outputTime"] = 13.8
+        a = f.create_group("analyses").create_group("a")
+        a.attrs["type"] = np.bytes_("function1D")
+        a.create_dataset("x", data=np.asarray(x, dtype=float))
+        a.attrs["xDataset"] = np.bytes_("x")
+        a.create_dataset("y", data=np.asarray(y, dtype=float))
+        a.attrs["yDataset"] = np.bytes_("y")
+        if y_target is not None:
+            a.create_dataset("yt", data=np.asarray(y_target, dtype=float))
+            a.attrs["yDatasetTarget"] = np.bytes_("yt")
+
+
+def test_x_y_shape_mismatch_raises(tmp_path):
+    p = tmp_path / "mismatched.hdf5"
+    _write_minimal_analysis(p, x=[1.0, 2.0, 3.0], y=[10.0, 20.0])
+    with open_outputs(str(p)) as c:
+        with pytest.raises(ValueError, match="yDataset shape .* does not match"):
+            c.plot_analyses()
+
+
+def test_x_must_be_1d(tmp_path):
+    p = tmp_path / "x2d.hdf5"
+    _write_minimal_analysis(
+        p, x=[[1.0, 2.0], [3.0, 4.0]], y=[[10.0, 20.0], [30.0, 40.0]]
+    )
+    with open_outputs(str(p)) as c:
+        with pytest.raises(ValueError, match="xDataset must be 1D"):
+            c.plot_analyses()
+
+
+def test_target_shape_mismatch_raises(tmp_path):
+    p = tmp_path / "target_mismatch.hdf5"
+    _write_minimal_analysis(
+        p, x=[1.0, 2.0, 3.0], y=[10.0, 20.0, 30.0], y_target=[1.0, 2.0]
+    )
+    with open_outputs(str(p)) as c:
+        with pytest.raises(ValueError, match="yDatasetTarget shape"):
+            c.plot_analyses()
+
+
 def test_attr_pointing_at_subgroup_raises(tmp_path):
     """If e.g. yDataset points at a subgroup instead of a dataset, surface a
     clear TypeError rather than h5py's confusing 'Group' object indexing
