@@ -124,11 +124,31 @@ class MVNFit:
             ET.SubElement(mp, "definition", value=definition)
 
         tree = ET.ElementTree(root)
-        ET.indent(tree, space="  ")
+        _indent_inplace(tree.getroot(), level=0, space="  ")
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         tree.write(out, encoding="utf-8", xml_declaration=True)
         return out.resolve()
+
+
+def _indent_inplace(elem: ET.Element, level: int = 0, space: str = "  ") -> None:
+    """In-place pretty-indenter equivalent to ``xml.etree.ElementTree.indent``.
+
+    Provided for Python 3.8, where ``ET.indent`` is not available.
+    """
+    i = "\n" + level * space
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + space
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for child in elem:
+            _indent_inplace(child, level + 1, space)
+        if not child.tail or not child.tail.strip():
+            child.tail = i
+    else:
+        if level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
 
 
 # ---------------------------------------------------------------------------
