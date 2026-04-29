@@ -44,7 +44,7 @@ from ._mcmc import (
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Chain",
