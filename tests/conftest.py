@@ -208,6 +208,142 @@ def history_file_varying_width(tmp_path):
     return str(p)
 
 
+def _write_analysis_function1d(
+    parent: h5py.Group,
+    name: str,
+    *,
+    x: np.ndarray,
+    y: np.ndarray,
+    description: str = "",
+    x_label: str = "x",
+    y_label: str = "y",
+    x_log: int = 0,
+    y_log: int = 0,
+    y_target: np.ndarray = None,
+    target_label: str = "Target",
+    y_err_lower: np.ndarray = None,
+    y_err_upper: np.ndarray = None,
+    y_covariance: np.ndarray = None,
+    y_target_err_lower: np.ndarray = None,
+    y_target_err_upper: np.ndarray = None,
+    y_target_covariance: np.ndarray = None,
+    type_value: str = "function1D",
+) -> None:
+    """Helper that writes one analysis subgroup with the standard Galacticus
+    attribute → dataset-name redirection pattern."""
+    grp = parent.create_group(name)
+    grp.attrs["type"] = np.bytes_(type_value)
+    grp.attrs["description"] = np.bytes_(description)
+    grp.attrs["xAxisLabel"] = np.bytes_(x_label)
+    grp.attrs["yAxisLabel"] = np.bytes_(y_label)
+    grp.attrs["xAxisIsLog"] = np.int32(x_log)
+    grp.attrs["yAxisIsLog"] = np.int32(y_log)
+    grp.attrs["targetLabel"] = np.bytes_(target_label)
+
+    grp.create_dataset("x", data=np.asarray(x, dtype=float))
+    grp.attrs["xDataset"] = np.bytes_("x")
+    grp.create_dataset("y", data=np.asarray(y, dtype=float))
+    grp.attrs["yDataset"] = np.bytes_("y")
+
+    if y_err_lower is not None and y_err_upper is not None:
+        grp.create_dataset("yErrorLower", data=np.asarray(y_err_lower, dtype=float))
+        grp.attrs["yErrorLower"] = np.bytes_("yErrorLower")
+        grp.create_dataset("yErrorUpper", data=np.asarray(y_err_upper, dtype=float))
+        grp.attrs["yErrorUpper"] = np.bytes_("yErrorUpper")
+    if y_covariance is not None:
+        grp.create_dataset("yCovariance", data=np.asarray(y_covariance, dtype=float))
+        grp.attrs["yCovariance"] = np.bytes_("yCovariance")
+
+    if y_target is not None:
+        grp.create_dataset("yTarget", data=np.asarray(y_target, dtype=float))
+        grp.attrs["yDatasetTarget"] = np.bytes_("yTarget")
+        if y_target_err_lower is not None and y_target_err_upper is not None:
+            grp.create_dataset(
+                "yErrorLowerTarget", data=np.asarray(y_target_err_lower, dtype=float)
+            )
+            grp.attrs["yErrorLowerTarget"] = np.bytes_("yErrorLowerTarget")
+            grp.create_dataset(
+                "yErrorUpperTarget", data=np.asarray(y_target_err_upper, dtype=float)
+            )
+            grp.attrs["yErrorUpperTarget"] = np.bytes_("yErrorUpperTarget")
+        if y_target_covariance is not None:
+            grp.create_dataset(
+                "yCovarianceTarget", data=np.asarray(y_target_covariance, dtype=float)
+            )
+            grp.attrs["yCovarianceTarget"] = np.bytes_("yCovarianceTarget")
+
+
+@pytest.fixture()
+def analyses_file(tmp_path):
+    """Galacticus-like file containing a populated ``/analyses`` group."""
+    p = tmp_path / "analyses.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        # nodeData (for completeness; not required by analyses code)
+        out = f.create_group("Outputs/Output1")
+        out.attrs["outputTime"] = 13.8
+        out.attrs["outputExpansionFactor"] = 1.0
+        out.create_group("nodeData")
+
+        analyses = f.create_group("analyses")
+
+        # Plain function1D, log axes, no target.
+        _write_analysis_function1d(
+            analyses, "simpleSMF",
+            x=[1e9, 1e10, 1e11],
+            y=[1e-2, 1e-3, 1e-4],
+            description=r"Stellar mass function $\hbox{at }z=0$",
+            x_label=r"$M_\star/M_\odot$",
+            y_label=r"$\phi\,/\,\hbox{Mpc}^{-3}\,\hbox{dex}^{-1}$",
+            x_log=1, y_log=1,
+        )
+
+        # function1D with target overlay + asymmetric errors on both.
+        _write_analysis_function1d(
+            analyses, "withTarget",
+            x=[1.0, 2.0, 3.0, 4.0],
+            y=[10.0, 20.0, 30.0, 40.0],
+            description=r"With target overlay $x \le 4$",
+            x_label="x",
+            y_label="y",
+            x_log=0, y_log=0,
+            y_err_lower=[9.0, 18.0, 27.0, 36.0],
+            y_err_upper=[11.5, 22.0, 33.0, 44.0],
+            y_target=[12.0, 19.0, 31.0, 39.0],
+            target_label="Foo+24",
+            y_target_err_lower=[10.0, 17.0, 28.0, 35.0],
+            y_target_err_upper=[14.0, 21.0, 34.0, 43.0],
+        )
+
+        # function1D with covariance only (no asymmetric errors).
+        cov = np.diag([0.1, 0.2, 0.3]) ** 2
+        _write_analysis_function1d(
+            analyses, "withCov",
+            x=[1.0, 2.0, 3.0],
+            y=[5.0, 6.0, 7.0],
+            description="Cov errors",
+            y_covariance=cov,
+        )
+
+        # Non-function1D — must be filtered out.
+        _write_analysis_function1d(
+            analyses, "notFunction1D",
+            x=[1.0, 2.0],
+            y=[1.0, 2.0],
+            type_value="function2D",
+        )
+
+        # Nested under stepN:chainM.
+        nested = analyses.create_group("step1:chain1")
+        _write_analysis_function1d(
+            nested, "inner",
+            x=[1.0, 2.0],
+            y=[10.0, 20.0],
+            description="Nested analysis",
+        )
+    return str(p)
+
+
 @pytest.fixture()
 def mpi_files(tmp_path):
     """Two MPI-split files that together cover one output."""
@@ -235,4 +371,22 @@ def mpi_files(tmp_path):
     p1 = tmp_path / "galacticus:MPI0001.hdf5"
     _make_file(p0, outputs=rank0_outputs)
     _make_file(p1, outputs=rank1_outputs)
+    return str(p0), str(p1)
+
+
+@pytest.fixture()
+def analyses_mpi_files(tmp_path):
+    """Two MPI-split files; only rank 0 carries the (already-reduced) /analyses."""
+    p0 = tmp_path / "ana:MPI0000.hdf5"
+    p1 = tmp_path / "ana:MPI0001.hdf5"
+    _make_file(p0)
+    _make_file(p1)
+    with h5py.File(p0, "a") as f:
+        analyses = f.create_group("analyses")
+        _write_analysis_function1d(
+            analyses, "simple",
+            x=[1.0, 2.0, 3.0],
+            y=[10.0, 20.0, 30.0],
+            description="MPI test",
+        )
     return str(p0), str(p1)

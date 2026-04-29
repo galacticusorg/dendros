@@ -24,6 +24,10 @@ API Reference
 
 .. autofunction:: dendros.trace_galaxy_history
 
+.. autofunction:: dendros.list_analyses
+
+.. autofunction:: dendros.plot_analyses
+
 Internal helpers
 ----------------
 
