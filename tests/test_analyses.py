@@ -504,6 +504,41 @@ def test_plot_analyses_accepts_open_models_result(analyses_two_models):
     assert "Var" in legend_labels
 
 
+def test_open_outputs_dict_returns_model_collection(analyses_two_models):
+    """Passing a dict to open_outputs is shorthand for open_models."""
+    a, b = analyses_two_models
+    with open_outputs({"Fid": a, "Var": b}) as m:
+        assert isinstance(m, ModelCollection)
+        assert set(m.keys()) == {"Fid", "Var"}
+
+
+def test_open_outputs_dict_plot_analyses_method(analyses_two_models):
+    """The shape from the user's bug report: with ... as analyses: analyses.plot_analyses()."""
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs({"Fid": a, "Var": b}) as analyses:
+        figs = analyses.plot_analyses(name="shared")
+
+    legend_labels = [t.get_text() for t in figs["shared"].axes[0].get_legend().get_texts()]
+    assert "Fid" in legend_labels
+    assert "Var" in legend_labels
+
+
+def test_model_collection_list_analyses_union(analyses_two_models):
+    a, b = analyses_two_models
+    with open_outputs({"Fid": a, "Var": b}) as analyses:
+        table = analyses.list_analyses(format="astropy")
+    names = list(table["name"])
+    # Union of analyses across both models.
+    assert set(names) == {"shared", "alsoShared", "onlyB"}
+    by_name = {row["name"]: row for row in table}
+    assert by_name["shared"]["models"] == "Fid, Var"
+    assert by_name["onlyB"]["models"] == "Var"
+
+
 def test_plot_missing_matplotlib_raises(analyses_file, monkeypatch):
     real_mpl = sys.modules.get("matplotlib")
     real_pyplot = sys.modules.get("matplotlib.pyplot")

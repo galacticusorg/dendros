@@ -601,9 +601,14 @@ def _make_table(rows: List[dict], format: str, **kwargs):
 
 
 def open_outputs(
-    path: Union[str, "Path", List[Union[str, "Path"]]],
+    path: Union[
+        str,
+        "Path",
+        List[Union[str, "Path"]],
+        Mapping[str, Union[str, "Path", List[Union[str, "Path"]]]],
+    ],
     output_root: str = "Outputs",
-) -> Collection:
+) -> Union[Collection, "ModelCollection"]:
     """Open a Galacticus output collection.
 
     Parameters
@@ -616,6 +621,10 @@ def open_outputs(
           automatically.
         * A glob string – e.g. ``"run*/galacticus*.hdf5"``.
         * An explicit list of filenames.
+        * A dict ``{label: path-or-paths}`` to open several models for
+          side-by-side comparison.  Equivalent to
+          :func:`open_models(path) <open_models>`; returns a
+          :class:`ModelCollection`.
 
     output_root:
         Top-level HDF5 group containing the ``Output*`` groups.
@@ -625,13 +634,19 @@ def open_outputs(
     Returns
     -------
     Collection
+        For the single-, glob-, or list-of-files forms (one model,
+        possibly MPI-split).
+    ModelCollection
+        For the dict form (one entry per model, suitable for
+        multi-model comparison plots).
 
     Raises
     ------
     FileNotFoundError
         If no files are found matching *path*.
     TypeError
-        If *path* is not a ``str``, :class:`pathlib.Path`, or ``list``.
+        If *path* is not a ``str``, :class:`pathlib.Path`, ``list``, or
+        ``dict``.
 
     Examples
     --------
@@ -651,10 +666,17 @@ def open_outputs(
 
         c = open_outputs(["file_a.hdf5", "file_b.hdf5"])
 
+    Open several models for comparison plots (see also :func:`open_models`)::
+
+        m = open_outputs({"Fiducial": "fid.hdf5", "Variant": "var.hdf5"})
+        figs = m.plot_analyses()
+
     Lightcone mode::
 
         c = open_outputs("lightcone.hdf5", output_root="Lightcone")
     """
+    if isinstance(path, Mapping):
+        return open_models(path, output_root=output_root)
     if isinstance(path, list):
         files = [str(p) for p in path]
     elif isinstance(path, (str, Path)):
@@ -668,7 +690,7 @@ def open_outputs(
             files = expanded
     else:
         raise TypeError(
-            f"path must be str, Path, or list; got {type(path).__name__!r}"
+            f"path must be str, Path, list, or dict; got {type(path).__name__!r}"
         )
 
     if not files:
@@ -701,6 +723,69 @@ class ModelCollection(dict):
 
     def __exit__(self, *args) -> None:
         self.close()
+
+    def list_analyses(self, format: str = "astropy"):
+        """Return the union of ``function1D`` analyses across all models.
+
+        Each row carries an extra ``models`` column listing the labels of
+        the models that contain the analysis (sorted, comma-separated).
+        Per-row metadata (description, axis labels, log flags, target
+        presence) is taken from the first model that supplies the
+        analysis.
+        """
+        from ._analyses import _analyses_root, _attr_bool, _attr_str, _discover
+
+        meta: Dict[str, dict] = {}
+        appears: Dict[str, list] = {}
+        for label, c in self.items():
+            for name, grp in _discover(_analyses_root(c)):
+                if name not in meta:
+                    meta[name] = {
+                        "name": name,
+                        "description": _attr_str(grp, "description"),
+                        "xAxisLabel": _attr_str(grp, "xAxisLabel"),
+                        "yAxisLabel": _attr_str(grp, "yAxisLabel"),
+                        "xAxisIsLog": _attr_bool(grp, "xAxisIsLog"),
+                        "yAxisIsLog": _attr_bool(grp, "yAxisIsLog"),
+                        "hasTarget": "yDatasetTarget" in grp.attrs,
+                    }
+                    appears[name] = []
+                appears[name].append(label)
+
+        rows = []
+        for name in sorted(meta):
+            row = dict(meta[name])
+            row["models"] = ", ".join(appears[name])
+            rows.append(row)
+        return _make_table(rows, format=format)
+
+    def plot_analyses(
+        self,
+        name=None,
+        output_directory=None,
+        *,
+        show_target: bool = True,
+        figsize=(7.0, 5.0),
+        dpi: int = 120,
+        file_format: str = "pdf",
+    ):
+        """Plot ``function1D`` analyses overlaid across every model.
+
+        Convenience wrapper around :func:`dendros.plot_analyses` applied
+        to this :class:`ModelCollection`.  Labels come from this dict's
+        keys; the target overlay is drawn once.
+        """
+        from ._analyses import plot_analyses
+
+        return plot_analyses(
+            self,
+            name=name,
+            output_directory=output_directory,
+            show_target=show_target,
+            figsize=figsize,
+            dpi=dpi,
+            file_format=file_format,
+        )
 
 
 def open_models(
