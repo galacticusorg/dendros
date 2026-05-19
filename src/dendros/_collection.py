@@ -5,7 +5,7 @@ import glob as _glob
 import re
 import warnings
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -13,6 +13,17 @@ import numpy as np
 from ._outputs import OutputIndex
 
 _MPI_SUFFIX = re.compile(r"^(.+):MPI(\d{4})$")
+
+
+def _default_model_label(primary_path: str) -> str:
+    """Default model label for a Collection: file stem with ``:MPIxxxx`` stripped.
+
+    ``/runs/fiducial.hdf5`` -> ``"fiducial"``;
+    ``/runs/fiducial:MPI0000.hdf5`` -> ``"fiducial"``.
+    """
+    stem = Path(primary_path).stem
+    m = _MPI_SUFFIX.match(stem)
+    return m.group(1) if m else stem
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +675,107 @@ def open_outputs(
         raise FileNotFoundError("No HDF5 files found.")
 
     return Collection(files, output_root=output_root)
+
+
+class ModelCollection(dict):
+    """A ``dict`` mapping label → :class:`Collection`, one entry per model.
+
+    Returned by :func:`open_models` and accepted by
+    :func:`~dendros.plot_analyses` so analyses from several Galacticus runs
+    can be overlaid on a single figure for comparison.
+
+    Acts as a regular dict but also supports the context-manager protocol —
+    ``__exit__`` closes every contained Collection.
+    """
+
+    def close(self) -> None:
+        """Close every contained Collection."""
+        for c in self.values():
+            try:
+                c.close()
+            except Exception:
+                pass
+
+    def __enter__(self) -> "ModelCollection":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+
+
+def open_models(
+    models: Union[
+        Mapping[str, Union[str, "Path", List[Union[str, "Path"]]]],
+        Sequence[Union[str, "Path", List[Union[str, "Path"]]]],
+    ],
+    output_root: str = "Outputs",
+) -> ModelCollection:
+    """Open several Galacticus runs as a labelled :class:`ModelCollection`.
+
+    Each entry is opened with :func:`open_outputs`, so a single filename
+    auto-detects its ``*_MPI:????`` peers and a list-of-files entry is
+    accepted as-is.  The returned :class:`ModelCollection` can be passed
+    directly to :func:`~dendros.plot_analyses` to overlay analyses from
+    every model on a single figure.
+
+    Parameters
+    ----------
+    models:
+        Either a dict ``{label: path-or-paths}`` — keys become legend
+        labels — or a list of ``path-or-paths``, in which case default
+        labels are derived from each model's primary file stem (with any
+        ``:MPIxxxx`` suffix stripped).
+    output_root:
+        Forwarded to :func:`open_outputs`.
+
+    Returns
+    -------
+    ModelCollection
+
+    Raises
+    ------
+    ValueError
+        If a list form produces duplicate default labels.  Pass a dict
+        with explicit labels to disambiguate.
+
+    Examples
+    --------
+    Compare two models with explicit labels::
+
+        with open_models({"Fiducial": "fid.hdf5", "Variant": "var.hdf5"}) as m:
+            figs = dendros.plot_analyses(m)
+
+    Or with labels derived from filenames::
+
+        models = open_models(["fid.hdf5", "var.hdf5"])
+    """
+    out = ModelCollection()
+    if isinstance(models, Mapping):
+        items = list(models.items())
+        for label, path in items:
+            out[label] = open_outputs(path, output_root=output_root)
+        return out
+
+    try:
+        paths = list(models)
+    except TypeError as exc:
+        raise TypeError(
+            "models must be a dict {label: path} or a list of paths; "
+            f"got {type(models).__name__!r}"
+        ) from exc
+
+    for path in paths:
+        c = open_outputs(path, output_root=output_root)
+        label = _default_model_label(c._files[0])
+        if label in out:
+            c.close()
+            out.close()
+            raise ValueError(
+                f"Duplicate default label {label!r} for models opened by "
+                "list. Pass models as a dict {label: path} to disambiguate."
+            )
+        out[label] = c
+    return out
 
 
 def _auto_detect_mpi(path: str) -> List[str]:

@@ -8,8 +8,9 @@ import h5py
 import numpy as np
 import pytest
 
-from dendros import open_outputs
+from dendros import ModelCollection, open_models, open_outputs, plot_analyses
 from dendros._analyses import _latex_fix, _safe_filename
+from dendros._collection import _default_model_label
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +274,234 @@ def test_attr_pointing_at_subgroup_raises(tmp_path):
     with open_outputs(str(p)) as c:
         with pytest.raises(TypeError, match="not an h5py.Dataset"):
             c.plot_analyses()
+
+
+# ---------------------------------------------------------------------------
+# Multi-model plotting
+# ---------------------------------------------------------------------------
+
+
+def test_default_model_label_strips_mpi_suffix():
+    assert _default_model_label("/runs/fiducial.hdf5") == "fiducial"
+    assert _default_model_label("/runs/fid:MPI0000.hdf5") == "fid"
+    assert _default_model_label("/runs/fid:MPI0007.hdf5") == "fid"
+    # Not an MPI suffix — leave alone.
+    assert _default_model_label("/runs/fid:MPI007.hdf5") == "fid:MPI007"
+
+
+def test_plot_analyses_dict_overlays_models(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        figs = plot_analyses({"Fid": ca, "Var": cb}, name="shared")
+
+    ax = figs["shared"].axes[0]
+    # Two model curves + one target overlay = 3 errorbar containers.
+    assert len(ax.containers) == 3
+    legend_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert "Fid" in legend_labels
+    assert "Var" in legend_labels
+    assert "Obs+24" in legend_labels
+    # Model curves should use different colours.
+    line_a = ax.containers[0].lines[0]
+    line_b = ax.containers[1].lines[0]
+    assert tuple(line_a.get_color()) != tuple(line_b.get_color())
+
+
+def test_plot_analyses_target_plotted_once(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        figs = plot_analyses([ca, cb], name="shared")
+
+    ax = figs["shared"].axes[0]
+    legend_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    # Exactly one target entry, even though both models have it.
+    assert legend_labels.count("Obs+24") == 1
+
+
+def test_plot_analyses_list_default_labels_from_filenames(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        figs = plot_analyses([ca, cb], name="shared")
+
+    legend_labels = [t.get_text() for t in figs["shared"].axes[0].get_legend().get_texts()]
+    assert "fiducial" in legend_labels
+    assert "variant" in legend_labels
+
+
+def test_plot_analyses_explicit_labels_override(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        figs = plot_analyses([ca, cb], name="shared", labels=["A", "B"])
+
+    legend_labels = [t.get_text() for t in figs["shared"].axes[0].get_legend().get_texts()]
+    assert "A" in legend_labels
+    assert "B" in legend_labels
+
+
+def test_plot_analyses_union_skips_missing_per_model(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        figs = plot_analyses({"Fid": ca, "Var": cb})
+
+    # Union: shared, alsoShared, onlyB.
+    assert set(figs.keys()) == {"shared", "alsoShared", "onlyB"}
+    # onlyB exists only in Var; legend should not list Fid.
+    ax = figs["onlyB"].axes[0]
+    legend_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert "Var" in legend_labels
+    assert "Fid" not in legend_labels
+
+
+def test_plot_analyses_labels_with_dict_raises(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        with pytest.raises(ValueError, match="labels="):
+            plot_analyses({"A": ca, "B": cb}, labels=["X", "Y"])
+
+
+def test_plot_analyses_labels_with_single_collection_raises(analyses_file):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    with open_outputs(analyses_file) as c:
+        with pytest.raises(ValueError, match="labels="):
+            plot_analyses(c, labels=["X"])
+
+
+def test_plot_analyses_label_count_mismatch_raises(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_outputs(a) as ca, open_outputs(b) as cb:
+        with pytest.raises(ValueError, match="length"):
+            plot_analyses([ca, cb], labels=["only-one"])
+
+
+def test_plot_analyses_duplicate_default_labels_raises(tmp_path):
+    """List form with two files that produce the same stem-derived label."""
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    d1 = tmp_path / "run1"
+    d2 = tmp_path / "run2"
+    d1.mkdir()
+    d2.mkdir()
+    for d in (d1, d2):
+        p = d / "out.hdf5"
+        with h5py.File(p, "w") as f:
+            f.attrs["statusCompletion"] = 0
+            o = f.create_group("Outputs/Output1")
+            o.attrs["outputTime"] = 13.8
+            o.create_group("nodeData")
+            a = f.create_group("analyses").create_group("x")
+            a.attrs["type"] = np.bytes_("function1D")
+            a.create_dataset("x", data=np.array([1.0, 2.0]))
+            a.attrs["xDataset"] = np.bytes_("x")
+            a.create_dataset("y", data=np.array([3.0, 4.0]))
+            a.attrs["yDataset"] = np.bytes_("y")
+
+    with open_outputs(str(d1 / "out.hdf5")) as c1, open_outputs(str(d2 / "out.hdf5")) as c2:
+        with pytest.raises(ValueError, match="collide"):
+            plot_analyses([c1, c2])
+
+
+def test_plot_analyses_mpi_collection_acts_as_one_model(analyses_mpi_files, analyses_file):
+    """An MPI-split Collection should plot a single curve, not one per rank."""
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    # Pair the MPI collection with a regular one so we're in multi-model mode.
+    with open_outputs(analyses_mpi_files[0]) as cmpi, open_outputs(analyses_file) as c:
+        assert len(cmpi.files) == 2  # both MPI peers were detected
+        figs = plot_analyses({"mpi-run": cmpi, "ref": c})
+
+    # cmpi only has "simple"; c has the others.  In the "simple" figure
+    # only mpi-run contributes (one curve, no target on this analysis).
+    ax = figs["simple"].axes[0]
+    assert len(ax.containers) == 1
+    legend_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert legend_labels == ["mpi-run"]
+
+
+def test_open_models_dict_returns_model_collection(analyses_two_models):
+    a, b = analyses_two_models
+    with open_models({"Fid": a, "Var": b}) as m:
+        assert isinstance(m, ModelCollection)
+        assert set(m.keys()) == {"Fid", "Var"}
+        assert "shared" in m["Fid"].list_analyses()["name"]
+
+
+def test_open_models_list_default_labels(analyses_two_models):
+    a, b = analyses_two_models
+    with open_models([a, b]) as m:
+        assert set(m.keys()) == {"fiducial", "variant"}
+
+
+def test_open_models_duplicate_default_labels_raises(tmp_path):
+    d1 = tmp_path / "r1"
+    d2 = tmp_path / "r2"
+    d1.mkdir()
+    d2.mkdir()
+    for d in (d1, d2):
+        p = d / "g.hdf5"
+        with h5py.File(p, "w") as f:
+            f.attrs["statusCompletion"] = 0
+            o = f.create_group("Outputs/Output1")
+            o.attrs["outputTime"] = 13.8
+            o.create_group("nodeData")
+    with pytest.raises(ValueError, match="Duplicate default label"):
+        open_models([str(d1 / "g.hdf5"), str(d2 / "g.hdf5")])
+
+
+def test_open_models_context_manager_closes_collections(analyses_two_models):
+    a, b = analyses_two_models
+    with open_models({"A": a, "B": b}) as m:
+        ca = m["A"]
+        assert ca._handles
+    # After context exit, both should be closed.
+    assert not ca._handles
+
+
+def test_plot_analyses_accepts_open_models_result(analyses_two_models):
+    pytest.importorskip("matplotlib")
+    import matplotlib
+    matplotlib.use("Agg")
+
+    a, b = analyses_two_models
+    with open_models({"Fid": a, "Var": b}) as m:
+        figs = plot_analyses(m, name="shared")
+    legend_labels = [t.get_text() for t in figs["shared"].axes[0].get_legend().get_texts()]
+    assert "Fid" in legend_labels
+    assert "Var" in legend_labels
 
 
 def test_plot_missing_matplotlib_raises(analyses_file, monkeypatch):

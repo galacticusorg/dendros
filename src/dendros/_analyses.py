@@ -15,17 +15,15 @@ from __future__ import annotations
 import re
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 
 import h5py
 import numpy as np
 
-from ._collection import _decode, _make_table
+from ._collection import Collection, _decode, _default_model_label, _make_table
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
-
-    from ._collection import Collection
 
 
 _ANALYSIS_TYPE = "function1D"
@@ -33,8 +31,9 @@ _ANALYSES_GROUP = "analyses"
 
 # Style ---------------------------------------------------------------------
 
-_MODEL_COLOR = "#1f4e79"   # deep blue
-_TARGET_COLOR = "#d1495b"  # brick red
+_MODEL_COLOR = "#1f4e79"   # deep blue, used for single-model plots
+_TARGET_COLOR = "#d1495b"  # brick red, used for the target/observational overlay
+_MULTI_MODEL_CMAP = "tab10"
 
 _RC: Dict[str, object] = {
     "axes.spines.top": False,
@@ -312,6 +311,59 @@ def _yerr_2xN(
     return np.vstack([np.clip(y - lo, 0.0, None), np.clip(hi - y, 0.0, None)])
 
 
+def _plot_model_curve(ax, info, label, color) -> None:
+    """Draw one model curve (with optional errorbars) onto *ax*."""
+    x, y = info["x"], info["y"]
+    ylo, yhi = info["y_err_lo"], info["y_err_hi"]
+    yerr = _yerr_2xN(y, ylo, yhi) if ylo is not None else None
+    ax.errorbar(
+        x, y,
+        yerr=yerr,
+        fmt="-",
+        lw=2.0,
+        color=color,
+        ecolor=color,
+        elinewidth=1.0,
+        capsize=0,
+        label=label,
+        zorder=3,
+    )
+
+
+def _plot_target(ax, info) -> None:
+    """Draw the target/observational overlay onto *ax*."""
+    yt = info["y_target"]
+    tlo, thi = info["yt_err_lo"], info["yt_err_hi"]
+    terr = _yerr_2xN(yt, tlo, thi) if tlo is not None else None
+    ax.errorbar(
+        info["x"], yt,
+        yerr=terr,
+        fmt="o",
+        ms=5,
+        mfc=_TARGET_COLOR,
+        mec=_TARGET_COLOR,
+        ecolor=_TARGET_COLOR,
+        elinewidth=1.0,
+        capsize=2,
+        linestyle="none",
+        label=info["target_label"] or "Target",
+        zorder=4,
+    )
+
+
+def _apply_axis_metadata(ax, name: str, info: Dict[str, object]) -> None:
+    """Set axis scales, labels, title, grid, legend from one analysis info."""
+    if info["x_log"]:
+        ax.set_xscale("log")
+    if info["y_log"]:
+        ax.set_yscale("log")
+    ax.set_xlabel(_latex_fix(info["x_label"]))
+    ax.set_ylabel(_latex_fix(info["y_label"]))
+    ax.set_title(_latex_fix(info["description"]) or name)
+    ax.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
+    ax.legend(frameon=False, loc="best")
+
+
 def _plot_one(
     name: str,
     info: Dict[str, object],
@@ -324,60 +376,55 @@ def _plot_one(
 
     with plt.rc_context(_RC):
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-
-        x = info["x"]
-        y = info["y"]
-        ylo, yhi = info["y_err_lo"], info["y_err_hi"]
-        yerr = _yerr_2xN(y, ylo, yhi) if ylo is not None else None
-        ax.errorbar(
-            x, y,
-            yerr=yerr,
-            fmt="-",
-            lw=2.0,
-            color=_MODEL_COLOR,
-            ecolor=_MODEL_COLOR,
-            elinewidth=1.0,
-            capsize=0,
-            label="Model",
-            zorder=3,
-        )
-
+        _plot_model_curve(ax, info, label="Model", color=_MODEL_COLOR)
         if show_target and info["has_target"]:
-            yt = info["y_target"]
-            tlo, thi = info["yt_err_lo"], info["yt_err_hi"]
-            terr = _yerr_2xN(yt, tlo, thi) if tlo is not None else None
-            ax.errorbar(
-                x, yt,
-                yerr=terr,
-                fmt="o",
-                ms=5,
-                mfc=_TARGET_COLOR,
-                mec=_TARGET_COLOR,
-                ecolor=_TARGET_COLOR,
-                elinewidth=1.0,
-                capsize=2,
-                linestyle="none",
-                label=info["target_label"] or "Target",
-                zorder=4,
-            )
-
-        if info["x_log"]:
-            ax.set_xscale("log")
-        if info["y_log"]:
-            ax.set_yscale("log")
-
-        ax.set_xlabel(_latex_fix(info["x_label"]))
-        ax.set_ylabel(_latex_fix(info["y_label"]))
-        title = _latex_fix(info["description"]) or name
-        ax.set_title(title)
-        ax.grid(True, which="both", linestyle=":", linewidth=0.6, alpha=0.6)
-        ax.legend(frameon=False, loc="best")
+            _plot_target(ax, info)
+        _apply_axis_metadata(ax, name, info)
         fig.tight_layout()
 
     # Detach from pyplot's state machine so that returning many Figures from
     # a notebook cell doesn't trigger duplicate inline-backend rendering and
     # so callers don't accumulate memory.  The Figure itself remains valid:
     # its axes, savefig, and IPython display all continue to work.
+    plt.close(fig)
+    return fig
+
+
+def _plot_multi(
+    name: str,
+    infos: List[Tuple[str, Dict[str, object]]],
+    *,
+    show_target: bool,
+    figsize: Tuple[float, float],
+    dpi: int,
+) -> "Figure":
+    """Plot one analysis with overlaid curves from several models.
+
+    *infos* is a list of ``(label, info_dict)`` pairs in the order the
+    models should be drawn / appear in the legend.  Only the first model
+    that has a target supplies the target overlay — it should be identical
+    across models, so plotting it once keeps the figure uncluttered.
+    """
+    import matplotlib.pyplot as plt
+
+    with plt.rc_context(_RC):
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        cmap = plt.get_cmap(_MULTI_MODEL_CMAP)
+        n_cmap = getattr(cmap, "N", 10)
+        for i, (label, info) in enumerate(infos):
+            _plot_model_curve(ax, info, label=label, color=cmap(i % n_cmap))
+
+        if show_target:
+            for _, info in infos:
+                if info["has_target"]:
+                    _plot_target(ax, info)
+                    break
+
+        # Axis metadata comes from the first contributing model — all
+        # models claiming to be the "same analysis" share the same axes.
+        _apply_axis_metadata(ax, name, infos[0][1])
+        fig.tight_layout()
+
     plt.close(fig)
     return fig
 
@@ -397,32 +444,129 @@ def _select_names(
     return requested
 
 
+_MultiInput = Union[
+    "Collection",
+    Sequence["Collection"],
+    Mapping[str, "Collection"],
+]
+
+
+def _normalize_collections(
+    collection: _MultiInput,
+    labels: Optional[Sequence[str]],
+) -> Tuple[bool, List[Tuple[str, "Collection"]]]:
+    """Normalize the ``collection`` argument into ``(is_multi, [(label, c), ...])``.
+
+    A single :class:`Collection` produces ``is_multi=False`` and preserves
+    legacy single-curve, ``label="Model"`` behaviour.  Lists and dicts —
+    even of length 1 — produce ``is_multi=True`` so the legend always
+    identifies the model.
+    """
+    if isinstance(collection, Collection):
+        if labels is not None:
+            raise ValueError(
+                "labels= is only meaningful when passing several Collections; "
+                "pass a list or dict of Collections."
+            )
+        return False, [("Model", collection)]
+
+    if isinstance(collection, Mapping):
+        if labels is not None:
+            raise ValueError(
+                "labels= cannot be combined with a dict input; the dict keys "
+                "already specify labels."
+            )
+        items: List[Tuple[str, Collection]] = []
+        for label, c in collection.items():
+            if not isinstance(c, Collection):
+                raise TypeError(
+                    f"Expected Collection values in dict; got "
+                    f"{type(c).__name__} for key {label!r}."
+                )
+            items.append((str(label), c))
+        if not items:
+            raise ValueError("collection mapping is empty.")
+        return True, items
+
+    try:
+        seq = list(collection)
+    except TypeError as exc:
+        raise TypeError(
+            "collection must be a Collection, a list of Collections, or a "
+            f"dict of {{label: Collection}}; got {type(collection).__name__!r}."
+        ) from exc
+    if not seq:
+        raise ValueError("collection sequence is empty.")
+    for c in seq:
+        if not isinstance(c, Collection):
+            raise TypeError(
+                f"Expected Collection elements; got {type(c).__name__}."
+            )
+
+    if labels is not None:
+        labels_list = list(labels)
+        if len(labels_list) != len(seq):
+            raise ValueError(
+                f"labels has length {len(labels_list)} but {len(seq)} "
+                "collections were provided."
+            )
+        return True, list(zip((str(label) for label in labels_list), seq))
+
+    auto = [_default_model_label(c._files[0]) for c in seq]
+    duplicates = [lbl for lbl in auto if auto.count(lbl) > 1]
+    if duplicates:
+        raise ValueError(
+            f"Default labels collide ({sorted(set(duplicates))!r}). Pass an "
+            "explicit labels= sequence or a dict {label: Collection}."
+        )
+    return True, list(zip(auto, seq))
+
+
 def plot_analyses(
-    collection: "Collection",
+    collection: _MultiInput,
     name: Union[None, str, List[str]] = None,
     output_directory: Union[None, str, "Path"] = None,
     *,
+    labels: Optional[Sequence[str]] = None,
     show_target: bool = True,
     figsize: Tuple[float, float] = (7.0, 5.0),
     dpi: int = 120,
     file_format: str = "pdf",
 ) -> Dict[str, "Figure"]:
-    """Plot one, several, or all ``function1D`` analyses from a collection.
+    """Plot one, several, or all ``function1D`` analyses.
+
+    A single :class:`~dendros.Collection` produces one model curve per
+    figure (legacy behaviour).  A list, dict, or
+    :class:`~dendros.ModelCollection` of Collections overlays one curve
+    per model on each figure, plotting the target/observational overlay
+    once (since it is shared across models).  The union of analyses
+    discovered across models is plotted — figures whose analysis is
+    absent from a given model simply do not include its curve.
 
     Parameters
     ----------
     collection:
-        A :class:`~dendros.Collection`.  Only the primary file is read; for
-        MPI runs the ``/analyses`` data is identical in every rank's file.
+        A :class:`~dendros.Collection`; a sequence of Collections; or a
+        mapping ``{label: Collection}`` (e.g. one returned by
+        :func:`~dendros.open_models`).
     name:
-        ``None`` (default) plots every ``function1D`` analysis discovered.
-        A single name (str) or list of names plots only those.
+        ``None`` (default) plots every ``function1D`` analysis discovered
+        across all models.  A single name (str) or list of names plots
+        only those.
     output_directory:
         If given, each figure is also saved as
-        ``<output_directory>/<safe_name>.<file_format>``.  The directory is
-        created if it does not exist.
+        ``<output_directory>/<safe_name>.<file_format>``.  The directory
+        is created if it does not exist.
+    labels:
+        Optional sequence of legend labels, one per Collection, used only
+        when *collection* is a list/tuple of Collections.  When omitted,
+        each model is labelled by its primary file's stem (with any
+        ``:MPIxxxx`` suffix stripped).  Cannot be combined with a dict
+        input.
     show_target:
-        If ``True`` (default), overlay target/observational data when present.
+        If ``True`` (default), overlay target/observational data when
+        present.  For multi-model plots the target is plotted only once,
+        from the first model that has it.
     figsize, dpi, file_format:
         Forwarded to matplotlib.
 
@@ -434,8 +578,8 @@ def plot_analyses(
     Raises
     ------
     KeyError
-        If no ``/analyses`` group is present, or if a requested name is
-        missing.
+        If a model has no ``/analyses`` group, or if a requested name is
+        missing from every model.
     ImportError
         If matplotlib is not installed; install with ``pip install
         'dendros[plot]'``.
@@ -448,9 +592,23 @@ def plot_analyses(
             "Install it with: pip install 'dendros[plot]'"
         ) from exc
 
-    root = _analyses_root(collection)
-    discovered = list(_discover(root))
-    if not discovered:
+    is_multi, label_coll = _normalize_collections(collection, labels)
+
+    # Discover analyses per collection and build the union, preserving the
+    # first-appearance order within each model (then sorted at the end).
+    per_collection: List[Tuple[str, Dict[str, "h5py.Group"]]] = []
+    union: List[str] = []
+    seen = set()
+    for label, c in label_coll:
+        root = _analyses_root(c)
+        discovered = dict(_discover(root))
+        per_collection.append((label, discovered))
+        for n in discovered:
+            if n not in seen:
+                seen.add(n)
+                union.append(n)
+
+    if not union:
         warnings.warn(
             f"No '{_ANALYSIS_TYPE}' analyses found under "
             f"'/{_ANALYSES_GROUP}'.",
@@ -459,8 +617,8 @@ def plot_analyses(
         )
         return {}
 
-    by_name = {n: g for n, g in discovered}
-    selected = _select_names(sorted(by_name.keys()), name)
+    union.sort()
+    selected = _select_names(union, name)
 
     out_dir: Optional[Path] = None
     if output_directory is not None:
@@ -469,13 +627,28 @@ def plot_analyses(
 
     figs: Dict[str, "Figure"] = {}
     for n in selected:
-        info = _read_analysis(by_name[n])
-        fig = _plot_one(
-            n, info,
-            show_target=show_target,
-            figsize=figsize,
-            dpi=dpi,
-        )
+        contributing: List[Tuple[str, Dict[str, object]]] = []
+        for label, discovered in per_collection:
+            grp = discovered.get(n)
+            if grp is not None:
+                contributing.append((label, _read_analysis(grp)))
+        if not contributing:
+            continue  # _select_names guarantees this can't happen
+
+        if is_multi:
+            fig = _plot_multi(
+                n, contributing,
+                show_target=show_target,
+                figsize=figsize,
+                dpi=dpi,
+            )
+        else:
+            fig = _plot_one(
+                n, contributing[0][1],
+                show_target=show_target,
+                figsize=figsize,
+                dpi=dpi,
+            )
         figs[n] = fig
         if out_dir is not None:
             fig.savefig(
