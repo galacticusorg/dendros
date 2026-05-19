@@ -512,11 +512,17 @@ def _normalize_collections(
             )
         return True, list(zip((str(label) for label in labels_list), seq))
 
-    auto = [_default_model_label(c._files[0]) for c in seq]
-    duplicates = [lbl for lbl in auto if auto.count(lbl) > 1]
+    auto = [_default_model_label(c.files[0]) for c in seq]
+    seen_labels: set = set()
+    duplicates: set = set()
+    for lbl in auto:
+        if lbl in seen_labels:
+            duplicates.add(lbl)
+        else:
+            seen_labels.add(lbl)
     if duplicates:
         raise ValueError(
-            f"Default labels collide ({sorted(set(duplicates))!r}). Pass an "
+            f"Default labels collide ({sorted(duplicates)!r}). Pass an "
             "explicit labels= sequence or a dict {label: Collection}."
         )
     return True, list(zip(auto, seq))
@@ -594,21 +600,18 @@ def plot_analyses(
 
     is_multi, label_coll = _normalize_collections(collection, labels)
 
-    # Discover analyses per collection and build the union, preserving the
-    # first-appearance order within each model (then sorted at the end).
+    # Build the union of analysis names across all models.  Output order
+    # is alphabetical so figure dicts and saved filenames are deterministic
+    # regardless of model or HDF5 traversal order.
     per_collection: List[Tuple[str, Dict[str, "h5py.Group"]]] = []
-    union: List[str] = []
-    seen = set()
+    union_set: set = set()
     for label, c in label_coll:
         root = _analyses_root(c)
         discovered = dict(_discover(root))
         per_collection.append((label, discovered))
-        for n in discovered:
-            if n not in seen:
-                seen.add(n)
-                union.append(n)
+        union_set.update(discovered.keys())
 
-    if not union:
+    if not union_set:
         warnings.warn(
             f"No '{_ANALYSIS_TYPE}' analyses found under "
             f"'/{_ANALYSES_GROUP}'.",
@@ -617,8 +620,7 @@ def plot_analyses(
         )
         return {}
 
-    union.sort()
-    selected = _select_names(union, name)
+    selected = _select_names(sorted(union_set), name)
 
     out_dir: Optional[Path] = None
     if output_directory is not None:

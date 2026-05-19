@@ -711,12 +711,22 @@ class ModelCollection(dict):
     """
 
     def close(self) -> None:
-        """Close every contained Collection."""
-        for c in self.values():
+        """Close every contained Collection.
+
+        Each close is attempted independently; if one fails the others
+        are still closed and a :class:`UserWarning` is emitted naming
+        the failing model so the problem is visible.
+        """
+        for label, c in self.items():
             try:
                 c.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                warnings.warn(
+                    f"ModelCollection: closing model {label!r} raised "
+                    f"{type(exc).__name__}: {exc}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     def __enter__(self) -> "ModelCollection":
         return self
@@ -755,7 +765,7 @@ class ModelCollection(dict):
         rows = []
         for name in sorted(meta):
             row = dict(meta[name])
-            row["models"] = ", ".join(appears[name])
+            row["models"] = ", ".join(sorted(appears[name]))
             rows.append(row)
         return _make_table(rows, format=format)
 
@@ -851,7 +861,7 @@ def open_models(
 
     for path in paths:
         c = open_outputs(path, output_root=output_root)
-        label = _default_model_label(c._files[0])
+        label = _default_model_label(c.files[0])
         if label in out:
             c.close()
             out.close()
