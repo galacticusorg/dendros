@@ -5,7 +5,7 @@ import glob as _glob
 import re
 import warnings
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -13,6 +13,17 @@ import numpy as np
 from ._outputs import OutputIndex
 
 _MPI_SUFFIX = re.compile(r"^(.+):MPI(\d{4})$")
+
+
+def _default_model_label(primary_path: str) -> str:
+    """Default model label for a Collection: file stem with ``:MPIxxxx`` stripped.
+
+    ``/runs/fiducial.hdf5`` -> ``"fiducial"``;
+    ``/runs/fiducial:MPI0000.hdf5`` -> ``"fiducial"``.
+    """
+    stem = Path(primary_path).stem
+    m = _MPI_SUFFIX.match(stem)
+    return m.group(1) if m else stem
 
 
 # ---------------------------------------------------------------------------
@@ -590,9 +601,14 @@ def _make_table(rows: List[dict], format: str, **kwargs):
 
 
 def open_outputs(
-    path: Union[str, "Path", List[Union[str, "Path"]]],
+    path: Union[
+        str,
+        "Path",
+        List[Union[str, "Path"]],
+        Mapping[str, Union[str, "Path", List[Union[str, "Path"]]]],
+    ],
     output_root: str = "Outputs",
-) -> Collection:
+) -> Union[Collection, "ModelCollection"]:
     """Open a Galacticus output collection.
 
     Parameters
@@ -605,6 +621,10 @@ def open_outputs(
           automatically.
         * A glob string – e.g. ``"run*/galacticus*.hdf5"``.
         * An explicit list of filenames.
+        * A dict ``{label: path-or-paths}`` to open several models for
+          side-by-side comparison.  Equivalent to
+          :func:`open_models(path) <open_models>`; returns a
+          :class:`ModelCollection`.
 
     output_root:
         Top-level HDF5 group containing the ``Output*`` groups.
@@ -614,13 +634,19 @@ def open_outputs(
     Returns
     -------
     Collection
+        For the single-, glob-, or list-of-files forms (one model,
+        possibly MPI-split).
+    ModelCollection
+        For the dict form (one entry per model, suitable for
+        multi-model comparison plots).
 
     Raises
     ------
     FileNotFoundError
         If no files are found matching *path*.
     TypeError
-        If *path* is not a ``str``, :class:`pathlib.Path`, or ``list``.
+        If *path* is not a ``str``, :class:`pathlib.Path`, ``list``, or
+        ``dict``.
 
     Examples
     --------
@@ -640,10 +666,17 @@ def open_outputs(
 
         c = open_outputs(["file_a.hdf5", "file_b.hdf5"])
 
+    Open several models for comparison plots (see also :func:`open_models`)::
+
+        m = open_outputs({"Fiducial": "fid.hdf5", "Variant": "var.hdf5"})
+        figs = m.plot_analyses()
+
     Lightcone mode::
 
         c = open_outputs("lightcone.hdf5", output_root="Lightcone")
     """
+    if isinstance(path, Mapping):
+        return open_models(path, output_root=output_root)
     if isinstance(path, list):
         files = [str(p) for p in path]
     elif isinstance(path, (str, Path)):
@@ -657,13 +690,187 @@ def open_outputs(
             files = expanded
     else:
         raise TypeError(
-            f"path must be str, Path, or list; got {type(path).__name__!r}"
+            f"path must be str, Path, list, or dict; got {type(path).__name__!r}"
         )
 
     if not files:
         raise FileNotFoundError("No HDF5 files found.")
 
     return Collection(files, output_root=output_root)
+
+
+class ModelCollection(dict):
+    """A ``dict`` mapping label → :class:`Collection`, one entry per model.
+
+    Returned by :func:`open_models` and accepted by
+    :func:`~dendros.plot_analyses` so analyses from several Galacticus runs
+    can be overlaid on a single figure for comparison.
+
+    Acts as a regular dict but also supports the context-manager protocol —
+    ``__exit__`` closes every contained Collection.
+    """
+
+    def close(self) -> None:
+        """Close every contained Collection.
+
+        Each close is attempted independently; if one fails the others
+        are still closed and a :class:`UserWarning` is emitted naming
+        the failing model so the problem is visible.
+        """
+        for label, c in self.items():
+            try:
+                c.close()
+            except Exception as exc:
+                warnings.warn(
+                    f"ModelCollection: closing model {label!r} raised "
+                    f"{type(exc).__name__}: {exc}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+    def __enter__(self) -> "ModelCollection":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+
+    def list_analyses(self, format: str = "astropy"):
+        """Return the union of ``function1D`` analyses across all models.
+
+        Each row carries an extra ``models`` column listing the labels of
+        the models that contain the analysis (sorted, comma-separated).
+        Per-row metadata (description, axis labels, log flags, target
+        presence) is taken from the first model that supplies the
+        analysis.
+        """
+        from ._analyses import _analyses_root, _attr_bool, _attr_str, _discover
+
+        meta: Dict[str, dict] = {}
+        appears: Dict[str, list] = {}
+        for label, c in self.items():
+            for name, grp in _discover(_analyses_root(c)):
+                if name not in meta:
+                    meta[name] = {
+                        "name": name,
+                        "description": _attr_str(grp, "description"),
+                        "xAxisLabel": _attr_str(grp, "xAxisLabel"),
+                        "yAxisLabel": _attr_str(grp, "yAxisLabel"),
+                        "xAxisIsLog": _attr_bool(grp, "xAxisIsLog"),
+                        "yAxisIsLog": _attr_bool(grp, "yAxisIsLog"),
+                        "hasTarget": "yDatasetTarget" in grp.attrs,
+                    }
+                    appears[name] = []
+                appears[name].append(label)
+
+        rows = []
+        for name in sorted(meta):
+            row = dict(meta[name])
+            row["models"] = ", ".join(sorted(appears[name]))
+            rows.append(row)
+        return _make_table(rows, format=format)
+
+    def plot_analyses(
+        self,
+        name=None,
+        output_directory=None,
+        *,
+        show_target: bool = True,
+        figsize=(7.0, 5.0),
+        dpi: int = 120,
+        file_format: str = "pdf",
+    ):
+        """Plot ``function1D`` analyses overlaid across every model.
+
+        Convenience wrapper around :func:`dendros.plot_analyses` applied
+        to this :class:`ModelCollection`.  Labels come from this dict's
+        keys; the target overlay is drawn once.
+        """
+        from ._analyses import plot_analyses
+
+        return plot_analyses(
+            self,
+            name=name,
+            output_directory=output_directory,
+            show_target=show_target,
+            figsize=figsize,
+            dpi=dpi,
+            file_format=file_format,
+        )
+
+
+def open_models(
+    models: Union[
+        Mapping[str, Union[str, "Path", List[Union[str, "Path"]]]],
+        Sequence[Union[str, "Path", List[Union[str, "Path"]]]],
+    ],
+    output_root: str = "Outputs",
+) -> ModelCollection:
+    """Open several Galacticus runs as a labelled :class:`ModelCollection`.
+
+    Each entry is opened with :func:`open_outputs`, so a single filename
+    auto-detects its ``*_MPI:????`` peers and a list-of-files entry is
+    accepted as-is.  The returned :class:`ModelCollection` can be passed
+    directly to :func:`~dendros.plot_analyses` to overlay analyses from
+    every model on a single figure.
+
+    Parameters
+    ----------
+    models:
+        Either a dict ``{label: path-or-paths}`` — keys become legend
+        labels — or a list of ``path-or-paths``, in which case default
+        labels are derived from each model's primary file stem (with any
+        ``:MPIxxxx`` suffix stripped).
+    output_root:
+        Forwarded to :func:`open_outputs`.
+
+    Returns
+    -------
+    ModelCollection
+
+    Raises
+    ------
+    ValueError
+        If a list form produces duplicate default labels.  Pass a dict
+        with explicit labels to disambiguate.
+
+    Examples
+    --------
+    Compare two models with explicit labels::
+
+        with open_models({"Fiducial": "fid.hdf5", "Variant": "var.hdf5"}) as m:
+            figs = dendros.plot_analyses(m)
+
+    Or with labels derived from filenames::
+
+        models = open_models(["fid.hdf5", "var.hdf5"])
+    """
+    out = ModelCollection()
+    if isinstance(models, Mapping):
+        items = list(models.items())
+        for label, path in items:
+            out[label] = open_outputs(path, output_root=output_root)
+        return out
+
+    try:
+        paths = list(models)
+    except TypeError as exc:
+        raise TypeError(
+            "models must be a dict {label: path} or a list of paths; "
+            f"got {type(models).__name__!r}"
+        ) from exc
+
+    for path in paths:
+        c = open_outputs(path, output_root=output_root)
+        label = _default_model_label(c.files[0])
+        if label in out:
+            c.close()
+            out.close()
+            raise ValueError(
+                f"Duplicate default label {label!r} for models opened by "
+                "list. Pass models as a dict {label: path} to disambiguate."
+            )
+        out[label] = c
+    return out
 
 
 def _auto_detect_mpi(path: str) -> List[str]:

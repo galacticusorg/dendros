@@ -229,3 +229,25 @@ identical in every rank's file, so dendros reads only the primary file.
        # Hide the target overlay (model only).
        figs = c.plot_analyses(show_target=False)
 
+To compare several models on the same figure, open them as a
+:class:`~dendros.ModelCollection` with :func:`~dendros.open_models` and
+pass the result to the module-level :func:`~dendros.plot_analyses`.  The
+target overlay is shared across models so it is drawn only once; each
+model contributes its own curve, labelled by the dict key (or by its
+primary file stem when no dict is supplied).  MPI-split files are still
+treated as a single model — only inter-model differences produce
+additional curves.
+
+.. code-block:: python
+
+   from dendros import open_models, plot_analyses
+
+   with open_models({"Fiducial": "fid.hdf5", "Variant": "var.hdf5"}) as m:
+       figs = plot_analyses(m)
+
+       # Or with default labels derived from filenames:
+       # figs = plot_analyses(open_models(["fid.hdf5", "var.hdf5"]))
+
+       # Or pass an explicit list with custom labels:
+       # figs = plot_analyses(list(m.values()), labels=["A", "B"])
+

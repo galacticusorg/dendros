@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ._analyses import list_analyses, plot_analyses
-from ._collection import Collection, open_outputs
+from ._collection import Collection, ModelCollection, open_models, open_outputs
 from ._galaxy_history import trace_galaxy_history
 from ._mcmc import (
     Chain,
@@ -45,12 +45,14 @@ from ._mcmc import (
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Chain",
     "ChainSet",
     "Collection",
+    "ModelCollection",
+    "open_models",
     "open_outputs",
     "list_analyses",
     "plot_analyses",

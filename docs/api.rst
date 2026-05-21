@@ -3,7 +3,14 @@ API Reference
 
 .. autofunction:: dendros.open_outputs
 
+.. autofunction:: dendros.open_models
+
 .. autoclass:: dendros.Collection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: dendros.ModelCollection
    :members:
    :undoc-members:
    :show-inheritance:

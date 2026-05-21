@@ -787,3 +787,44 @@ def analyses_mpi_files(tmp_path):
             description="MPI test",
         )
     return str(p0), str(p1)
+
+
+@pytest.fixture()
+def analyses_two_models(tmp_path):
+    """Two separate model files sharing analyses for multi-model overlay tests.
+
+    Both files contain ``shared`` (with target overlay) and ``alsoShared``;
+    only the second contains ``onlyB`` so the union-of-analyses behaviour
+    is exercised.  Y values differ between models so plots can be told
+    apart.
+    """
+    a = tmp_path / "fiducial.hdf5"
+    b = tmp_path / "variant.hdf5"
+    for path, y_scale in ((a, 1.0), (b, 2.0)):
+        with h5py.File(path, "w") as f:
+            f.attrs["statusCompletion"] = 0
+            out = f.create_group("Outputs/Output1")
+            out.attrs["outputTime"] = 13.8
+            out.attrs["outputExpansionFactor"] = 1.0
+            out.create_group("nodeData")
+            analyses = f.create_group("analyses")
+            _write_analysis_function1d(
+                analyses, "shared",
+                x=[1.0, 2.0, 3.0],
+                y=[10.0 * y_scale, 20.0 * y_scale, 30.0 * y_scale],
+                description="Shared analysis",
+                y_target=[12.0, 19.0, 31.0],
+                target_label="Obs+24",
+            )
+            _write_analysis_function1d(
+                analyses, "alsoShared",
+                x=[1.0, 2.0],
+                y=[5.0 * y_scale, 6.0 * y_scale],
+            )
+    with h5py.File(b, "a") as f:
+        _write_analysis_function1d(
+            f["analyses"], "onlyB",
+            x=[1.0, 2.0],
+            y=[100.0, 200.0],
+        )
+    return str(a), str(b)
