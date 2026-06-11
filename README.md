@@ -106,8 +106,8 @@ index  name     time   scale_factor  redshift  output_type
 ```
 
 The `output_type` column reports the kind of output each group holds —
-`tree`, `node`, `snapshot`, or `lightcone` — and is blank for older files
-that predate the `outputType` attribute.
+`tree`, `node`, `snapshot`, or `lightcone` — and is `None` (a missing
+value) for older files that predate the `outputType` attribute.
 
 You can also access the index object directly:
 

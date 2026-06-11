@@ -146,7 +146,7 @@ class OutputIndex:
                 "time": o.time,
                 "scale_factor": o.scale_factor,
                 "redshift": o.redshift,
-                "output_type": o.output_type if o.output_type is not None else "",
+                "output_type": o.output_type,
             }
             for o in self._outputs
         ]

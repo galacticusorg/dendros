@@ -65,8 +65,8 @@ Listing outputs
 The table contains columns: ``index``, ``name``, ``time``,
 ``scale_factor``, ``redshift``, and ``output_type``.  The ``output_type``
 column reports the kind of output each group holds (``tree``, ``node``,
-``snapshot``, or ``lightcone``); it is blank for older files that predate
-the ``outputType`` attribute.
+``snapshot``, or ``lightcone``); it is ``None`` (a missing value) for older
+files that predate the ``outputType`` attribute.
 
 Listing properties
 ------------------

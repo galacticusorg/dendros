@@ -33,6 +33,14 @@ def test_output_type_absent_is_none(history_file):
     assert meta.output_type is None
 
 
+def test_list_outputs_output_type_none_when_absent(history_file):
+    """The output_type table cell is None (not '') for legacy files."""
+    with open_outputs(history_file) as c:
+        tbl = c.list_outputs()
+    row = tbl[tbl["name"] == "Output1"][0]
+    assert row["output_type"] is None
+
+
 def test_output1_redshift_zero(single_file):
     """Output1 has a=1.0, so z should be 0."""
     with open_outputs(single_file) as c:

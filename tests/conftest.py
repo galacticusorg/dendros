@@ -82,7 +82,11 @@ def _make_file(
             grp = root.create_group(f"Output{i}")
             grp.attrs["outputTime"] = out["time"]
             grp.attrs["outputExpansionFactor"] = out["a"]
-            grp.attrs["outputType"] = out.get("type", "snapshot")
+            # ``type=None`` deliberately omits the attribute, so this helper can
+            # also generate legacy files that predate ``outputType``.
+            output_type = out.get("type", "snapshot")
+            if output_type is not None:
+                grp.attrs["outputType"] = output_type
             node = grp.create_group("nodeData")
             for name, arr in out["data"].items():
                 ds = node.create_dataset(name, data=arr)

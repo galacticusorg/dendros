@@ -211,9 +211,10 @@ def trace_galaxy_history(
             f"{meta.name} (outputType={meta.output_type!r})"
             for meta in untraceable
         )
+        traceable = " or ".join(f"'{t}'" for t in sorted(_TRACEABLE_OUTPUT_TYPES))
         raise ValueError(
             "Galaxy-history tracing is only meaningful for outputs of type "
-            f"{sorted(_TRACEABLE_OUTPUT_TYPES)!r}, but the following chosen "
+            f"{traceable}, but the following chosen "
             f"output(s) are not traceable: {offenders}. A galaxy appears at "
             "most once in 'lightcone' and 'node' outputs, so its history "
             "cannot be assembled. Restrict to traceable outputs with the "
