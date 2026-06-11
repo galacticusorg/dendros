@@ -224,9 +224,9 @@ axis 0.
 Star formation histories
 ------------------------
 
-Star formation histories are output as lists of 2D :class:`numpy.ndarray` objects,
-with one dimension being time, and the other metallicity. Dendros provides
-functions to collapse (sum) over metallicity:
+Star formation histories are stored per galaxy, tabulated over time and
+metallicity.  Dendros provides functions to collapse (sum) over metallicity
+and to recover the tabulation times:
 
 .. code-block:: python
 
@@ -234,8 +234,37 @@ functions to collapse (sum) over metallicity:
 
    with open_outputs("galacticus.hdf5") as c:
        sfh = c["Outputs/Output1/nodeData/diskStarFormationHistoryMass"]
-       sfh_times = sfh_times(sfh)
-       sfh_collapsed = sfh_collapse_metallicities(sfh)
+       times = sfh_times(sfh)
+       collapsed = sfh_collapse_metallicities(sfh)
+
+When every galaxy is tabulated at the same times (a shared ``time`` attribute),
+:func:`~dendros.sfh_collapse_metallicities` returns a fixed-length 2D array of
+shape ``(n_galaxies, n_times)`` and :func:`~dendros.sfh_times` returns the
+common 1D time array.
+
+Lightcone runs commonly use the ``fixedAges`` method, where each galaxy is
+tabulated at a fixed set of ages relative to its lightcone-crossing time.  Ages
+that precede the Big Bang are dropped, so galaxies that cross earlier retain
+fewer bins and the per-galaxy arrays have different lengths.  Dendros detects
+this method (from the ``Parameters`` group) and *right-aligns* the histories
+into non-ragged 2D arrays of shape ``(n_galaxies, n_ages)``: the
+crossing-time bin is the last column, dropped bins are padded at the front
+(with ``0`` for masses and ``NaN`` for times), and the companion
+``...Times`` dataset supplies the per-galaxy times.  Column ``j`` of the mass
+and time arrays refer to the same tabulation bin, though — because each galaxy
+crosses at a different cosmic time — a given column holds a different absolute
+time for each galaxy (but the same lookback age relative to crossing).
+
+.. code-block:: python
+
+   with open_outputs("lightcone.hdf5", output_root="Lightcone") as c:
+       sfh = c["Lightcone/Output1/nodeData/diskStarFormationHistoryMass"]
+       collapsed = sfh_collapse_metallicities(sfh)   # (n_galaxies, n_ages)
+       times = sfh_times(sfh)                         # (n_galaxies, n_ages), NaN-padded
+
+For other variable-length tabulations (no fixed-age structure), the collapsed
+histories are returned as a list of 1D arrays and :func:`~dendros.sfh_times`
+returns ``None``.
 
 Plotting analyses
 -----------------
