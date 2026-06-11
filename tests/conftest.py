@@ -312,6 +312,30 @@ def sfh_fixedages_file(tmp_path):
 
 
 @pytest.fixture()
+def sfh_fixedages_no_times_file(tmp_path):
+    """A ``fixedAges`` lightcone file that is missing its companion
+    ``...Times`` dataset.
+
+    Exercises the fallback path: the masses can still be collapsed and
+    right-aligned, but :func:`~dendros.sfh_times` has no per-galaxy times to
+    read and must return ``None``.
+    """
+    p = tmp_path / "lightcone_sfh_no_times.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        sfh_params = f.create_group("Parameters/starFormationHistory")
+        sfh_params.attrs["countAges"] = 10
+        sfh_params.attrs["ageMinimum"] = 0.001
+        nd = f.create_group("Lightcone/Output1/nodeData")
+        per_galaxy = [
+            [np.array([1.0, 2.0, 3.0]), np.array([10.0, 20.0, 30.0])],
+            [np.array([4.0, 5.0]), np.array([40.0, 50.0])],
+        ]
+        _write_sfh_mass(nd, "diskStarFormationHistoryMass", per_galaxy)
+    return str(p)
+
+
+@pytest.fixture()
 def sfh_fixed_time_file(tmp_path):
     """A standard output whose SFH uses a shared ``time`` attribute.
 

@@ -113,12 +113,11 @@ def _fixed_ages_parameters(collection):
     ``fixedAges`` star formation history class is uniquely identified by its
     ``countAges`` and ``ageMinimum`` parameters, which no other class defines.
     """
-    try:
-        params = collection._primary['Parameters']
-    except (KeyError, TypeError):
+    path = 'Parameters/starFormationHistory'
+    if path not in collection:
         return None
-    group = params.get('starFormationHistory') if hasattr(params, 'get') else None
-    if group is not None and 'countAges' in group.attrs and 'ageMinimum' in group.attrs:
+    group = collection[path]
+    if 'countAges' in group.attrs and 'ageMinimum' in group.attrs:
         return group
     return None
 
@@ -128,12 +127,11 @@ def _companion_times_dataset(dataset: "DatasetProxy"):
     ``...Mass`` star formation history dataset, or ``None`` if absent."""
     if not dataset.name.endswith('Mass'):
         return None
-    times_path = dataset.name[:-len('Mass')] + 'Times'
-    try:
-        dataset._collection._primary[times_path]
-    except KeyError:
+    times_path  = dataset.name[:-len('Mass')] + 'Times'
+    collection  = dataset._collection
+    if times_path not in collection:
         return None
-    return DatasetProxy(dataset._collection, times_path)
+    return collection[times_path]
 
 
 def _right_align(arrays, fill):

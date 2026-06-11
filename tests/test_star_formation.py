@@ -79,6 +79,20 @@ def test_sfh_fixedages_last_column_is_crossing(sfh_fixedages_file):
     np.testing.assert_allclose(times[1][-1], 2.5)
 
 
+def test_sfh_fixedages_missing_times_dataset(sfh_fixedages_no_times_file):
+    """A fixedAges file lacking the companion '...Times' dataset still collapses
+    the masses (right-aligned), but sfh_times falls back to None."""
+    with open_outputs(sfh_fixedages_no_times_file, output_root="Lightcone") as c:
+        ds = c["Lightcone/Output1/nodeData/diskStarFormationHistoryMass"]
+        mass = sfh_collapse_metallicities(ds)
+        times = sfh_times(ds)
+    assert isinstance(mass, np.ndarray)
+    assert mass.shape == (2, 3)
+    np.testing.assert_allclose(mass[0], [11.0, 22.0, 33.0])
+    np.testing.assert_allclose(mass[1], [0.0, 44.0, 55.0])
+    assert times is None
+
+
 # ---------------------------------------------------------------------------
 # Ragged tabulation without the fixedAges method -> legacy list behaviour
 # ---------------------------------------------------------------------------
