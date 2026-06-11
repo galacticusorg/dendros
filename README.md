@@ -99,11 +99,15 @@ with open_outputs("galacticus.hdf5") as c:
 Example output:
 
 ```
-index  name     time   scale_factor  redshift
------ ------- -------- ------------ ---------
-    1 Output1  13.8        1.0          0.0
-    2 Output2   6.0        0.5          1.0
+index  name     time   scale_factor  redshift  output_type
+----- ------- -------- ------------ --------- -----------
+    1 Output1  13.8        1.0          0.0      snapshot
+    2 Output2   6.0        0.5          1.0      snapshot
 ```
+
+The `output_type` column reports the kind of output each group holds —
+`tree`, `node`, `snapshot`, or `lightcone` — and is blank for older files
+that predate the `outputType` attribute.
 
 You can also access the index object directly:
 
