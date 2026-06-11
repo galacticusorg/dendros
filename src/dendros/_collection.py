@@ -39,6 +39,91 @@ def _decode(value) -> str:
     return str(value) if not isinstance(value, str) else value
 
 
+def _read_units(ds) -> Optional[dict]:
+    """Return the units metadata for an HDF5 dataset, or ``None``.
+
+    Galacticus datasets carry a structured ``units`` attribute with the
+    fields ``unitsInSI``, ``description``, ``quantity``, and ``isComoving``.
+    This helper normalizes that into a plain dict::
+
+        {"unitsInSI": float, "description": str,
+         "quantity": str, "isComoving": int}
+
+    For backwards compatibility with older outputs it also recognizes the
+    legacy scalar ``unitsInSI`` attribute, returning a dict whose
+    ``description`` and ``quantity`` are empty strings.  Returns ``None``
+    when the dataset carries no units metadata at all.
+    """
+    raw = ds.attrs.get("units")
+    if raw is not None:
+        names = getattr(raw.dtype, "names", None) or ()
+
+        def _field(field, default):
+            if field not in names:
+                return default
+            return raw[field]
+
+        try:
+            units_si = float(_field("unitsInSI", 1.0))
+        except (TypeError, ValueError):
+            units_si = 1.0
+        try:
+            is_comoving = int(_field("isComoving", 0))
+        except (TypeError, ValueError):
+            is_comoving = 0
+        return {
+            "unitsInSI": units_si,
+            "description": _decode(_field("description", "")),
+            "quantity": _decode(_field("quantity", "")),
+            "isComoving": is_comoving,
+        }
+
+    legacy = ds.attrs.get("unitsInSI")
+    if legacy is not None:
+        try:
+            units_si = float(legacy)
+        except (TypeError, ValueError):
+            units_si = 1.0
+        return {
+            "unitsInSI": units_si,
+            "description": "",
+            "quantity": "",
+            "isComoving": 0,
+        }
+
+    return None
+
+
+def _apply_units(arr: np.ndarray, units: Optional[dict]) -> "np.ndarray":
+    """Attach an :mod:`astropy.units` unit to *arr* when one is available.
+
+    Uses the ``quantity`` field of *units* (an ``astropy.units``-parseable
+    string) to build a unit and returns ``arr * unit`` as an
+    :class:`astropy.units.Quantity`.  Dimensionless datasets (those with an
+    empty ``quantity``) and datasets without units metadata are returned
+    unchanged as plain :class:`numpy.ndarray` objects.  If the ``quantity``
+    string cannot be parsed, a warning is issued and the plain array is
+    returned.
+    """
+    if not units:
+        return arr
+    quantity = units.get("quantity") or ""
+    if not quantity:
+        return arr
+    from astropy import units as u
+
+    try:
+        unit = u.Unit(quantity)
+    except Exception as exc:  # pragma: no cover - defensive
+        warnings.warn(
+            f"Could not parse units quantity {quantity!r} "
+            f"({exc}); returning a plain numpy array.",
+            stacklevel=2,
+        )
+        return arr
+    return arr * unit
+
+
 def _resolve_output_name(output: Union[str, int]) -> str:
     """Return the Output* group name for a string or 1-based integer."""
     if isinstance(output, int):
@@ -349,6 +434,11 @@ class Collection:
     ):
         """Return a table of datasets available in the ``nodeData`` group.
 
+        The table has columns ``name``, ``dtype``, ``shape``,
+        ``description`` (the dataset's ``comment``), and ``units`` (the
+        human-readable units description, e.g. ``"Solar masses"``; blank for
+        dimensionless datasets).
+
         Parameters
         ----------
         output:
@@ -374,19 +464,16 @@ class Collection:
         rows: List[dict] = []
         for name in sorted(group.keys()):
             ds = group[name]
-            attrs = {k: _decode(v) for k, v in ds.attrs.items()}
-            raw_units = attrs.get("unitsInSI")
-            try:
-                units_val = float(raw_units) if raw_units not in (None, "") else 1.0
-            except (TypeError, ValueError):
-                units_val = raw_units
+            comment = _decode(ds.attrs["comment"]) if "comment" in ds.attrs else ""
+            units = _read_units(ds)
+            units_desc = units["description"] if units else ""
             rows.append(
                 {
                     "name": name,
                     "dtype": str(ds.dtype),
                     "shape": str(ds.shape),
-                    "description": attrs.get("comment", ""),
-                    "unitsInSI": units_val,
+                    "description": comment,
+                    "units": units_desc,
                 }
             )
 
@@ -401,6 +488,7 @@ class Collection:
         output: Union[str, int],
         datasets: Union[List[str], Dict[str, str]],
         where=None,
+        as_quantity: bool = True,
     ) -> Dict[str, np.ndarray]:
         """Read one or more datasets from an output group.
 
@@ -419,17 +507,19 @@ class Collection:
         where:
             ``None`` reads all rows.  A boolean mask array of length
             *N_total* or an integer index array selects a subset.
+        as_quantity:
+            When ``True`` (default), datasets that carry a ``quantity`` string
+            in their ``units`` attribute are returned as
+            :class:`astropy.units.Quantity` objects.  Dimensionless datasets
+            (empty ``quantity``) and datasets without units metadata are always
+            returned as plain :class:`numpy.ndarray` objects.  Set to ``False``
+            to return plain arrays for every dataset.
 
         Returns
         -------
         dict
-            Mapping from dataset name / label to :class:`numpy.ndarray`.
-
-        Notes
-        -----
-        The ``unitsInSI`` attribute is preserved in the raw array values
-        but not yet applied.  Future versions will optionally return
-        :class:`astropy.units.Quantity` objects.
+            Mapping from dataset name / label to :class:`numpy.ndarray` or
+            :class:`astropy.units.Quantity`.
         """
         output_name = _resolve_output_name(output)
         output_path = f"{self._output_root}/{output_name}"
@@ -443,16 +533,22 @@ class Collection:
         for label, rel_path in datasets_map.items():
             full_path = output_path + "/" + rel_path.lstrip("/")
             arrays: List[np.ndarray] = []
+            units: Optional[dict] = None
             for h in self._handles:
                 try:
-                    arrays.append(h[full_path][()])
+                    ds = h[full_path]
                 except KeyError:
                     raise KeyError(
                         f"Dataset '{full_path}' not found in '{h.filename}'"
                     ) from None
+                arrays.append(ds[()])
+                if units is None:
+                    units = _read_units(ds)
             arr = np.concatenate(arrays, axis=0) if len(arrays) > 1 else arrays[0]
             if where is not None:
                 arr = arr[np.asarray(where)]
+            if as_quantity:
+                arr = _apply_units(arr, units)
             result[label] = arr
 
         return result

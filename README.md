@@ -125,20 +125,31 @@ with open_outputs("galacticus.hdf5") as c:
 Example output:
 
 ```
-name         dtype    shape   description          unitsInSI
----------- ------- -------- -------------------- -----------
-haloMass   float64  (1000,) Halo virial mass     1.989e+30
-stellarMass float64 (1000,) Stellar mass of disk 1.989e+30
+name         dtype    shape   description          units
+---------- ------- -------- -------------------- ------------
+haloMass   float64  (1000,) Halo virial mass     Solar masses
+stellarMass float64 (1000,) Stellar mass of disk Solar masses
 ...
 ```
 
+The `units` column shows a human-readable units description (blank for
+dimensionless datasets).
+
 ### Reading datasets
+
+By default, datasets that carry a units `quantity` are returned as
+[`astropy.units.Quantity`](https://docs.astropy.org/en/stable/units/) objects,
+so units travel with the data.  Dimensionless datasets are returned as plain
+numpy arrays.  Pass `as_quantity=False` to get plain numpy arrays for every
+dataset.
 
 ```python
 with open_outputs("galacticus.hdf5") as c:
     # List of dataset paths → same strings used as dict keys
     data = c.read("Output1", ["nodeData/basicMass", "nodeData/diskMassStellar"])
-    print(data["nodeData/basicMass"])   # numpy array
+    mass = data["nodeData/basicMass"]   # astropy Quantity, in solar masses
+    print(mass.to("kg"))                # convert units
+    print(mass.value)                   # underlying numpy array
 
     # Dict → custom labels
     data = c.read(
@@ -146,6 +157,9 @@ with open_outputs("galacticus.hdf5") as c:
         {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
     )
     print(data["Mhalo"])
+
+    # Plain numpy arrays, no units
+    data = c.read("Output1", ["nodeData/basicMass"], as_quantity=False)
 ```
 
 ### Filtering galaxies
@@ -156,7 +170,7 @@ Pass a boolean mask or integer index array as `where`:
 with open_outputs("galacticus.hdf5") as c:
     # First read to build a mask
     masses = c.read("Output1", ["nodeData/basicMass"])["nodeData/basicMass"]
-    mask = masses > 1e12
+    mask = masses.value > 1e12
 
     # Then read everything for the selected galaxies only
     data = c.read(

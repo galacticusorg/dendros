@@ -8,6 +8,32 @@ import numpy as np
 import pytest
 
 
+# Structured datatype mirroring Galacticus' ``units`` attribute.
+_UNITS_DTYPE = np.dtype(
+    {
+        "names": ["unitsInSI", "description", "quantity", "isComoving"],
+        "formats": ["<f8", "S512", "S512", "<i4"],
+        "offsets": [0, 8, 520, 1032],
+        "itemsize": 1040,
+    }
+)
+
+# Default units metadata (unitsInSI, description, quantity) keyed by dataset
+# name.  Datasets not listed here are treated as dimensionless.
+_DEFAULT_UNITS = {
+    "basicMass": (1.98892e30, "Solar masses", "solMass"),
+    "diskMassStellar": (1.98892e30, "Solar masses", "solMass"),
+}
+
+
+def _set_units(ds, units_si, description, quantity, is_comoving=0):
+    """Attach a structured ``units`` attribute to dataset *ds*."""
+    ds.attrs["units"] = np.array(
+        (units_si, description.encode("utf-8"), quantity.encode("utf-8"), is_comoving),
+        dtype=_UNITS_DTYPE,
+    )
+
+
 def _make_file(
     path: Path,
     outputs=None,
@@ -35,6 +61,7 @@ def _make_file(
                 "data": {
                     "basicMass": np.array([1e12, 2e12, 3e12]),
                     "diskMassStellar": np.array([1e10, 2e10, 3e10]),
+                    "spin": np.array([0.1, 0.2, 0.3]),
                 },
             },
             {
@@ -43,6 +70,7 @@ def _make_file(
                 "data": {
                     "basicMass": np.array([5e11, 1e12]),
                     "diskMassStellar": np.array([5e9, 1e10]),
+                    "spin": np.array([0.15, 0.25]),
                 },
             },
         ]
@@ -58,7 +86,10 @@ def _make_file(
             for name, arr in out["data"].items():
                 ds = node.create_dataset(name, data=arr)
                 ds.attrs["comment"] = f"Test dataset {name}"
-                ds.attrs["unitsInSI"] = 1.989e30  # solar mass in kg
+                units_si, description, quantity = _DEFAULT_UNITS.get(
+                    name, (1.0, "", "")
+                )
+                _set_units(ds, units_si, description, quantity)
 
 
 # ---------------------------------------------------------------------------
