@@ -74,7 +74,10 @@ Listing properties
        tbl = c.list_properties("Output1")  # by name
        tbl = c.list_properties(1)          # by 1-based integer index
 
-Columns: ``name``, ``dtype``, ``shape``, ``description``, ``unitsInSI``.
+Columns: ``name``, ``dtype``, ``shape``, ``description``, ``units``.  The
+``units`` column shows a human-readable units description (e.g.
+``"Solar masses"``), taken from the dataset's ``units`` attribute; it is
+blank for dimensionless datasets.
 
 Reading datasets
 ----------------
@@ -83,13 +86,39 @@ Reading datasets
 
    with open_outputs("galacticus.hdf5") as c:
        data = c.read("Output1", ["nodeData/basicMass"])
-       # data["nodeData/basicMass"] is a numpy array
+       # data["nodeData/basicMass"] is an astropy Quantity (in solar masses)
 
        # Custom labels via dict
        data = c.read(
            "Output1",
            {"Mhalo": "nodeData/basicMass", "Mstar": "nodeData/diskMassStellar"},
        )
+
+Units and ``Quantity`` objects
+------------------------------
+
+By default, datasets that carry a units ``quantity`` string are returned as
+:class:`astropy.units.Quantity` objects, so you can convert between units and
+carry units through calculations:
+
+.. code-block:: python
+
+   with open_outputs("galacticus.hdf5") as c:
+       mass = c.read("Output1", ["nodeData/basicMass"])["nodeData/basicMass"]
+
+   mass.unit                 # Unit("solMass")
+   mass.to("kg")             # convert to kilograms
+   mass.value                # the underlying numpy array
+
+Dimensionless datasets (those with an empty ``quantity``) are always returned
+as plain :class:`numpy.ndarray` objects.  To disable the ``Quantity`` wrapping
+entirely and get plain arrays for every dataset, pass ``as_quantity=False``:
+
+.. code-block:: python
+
+   with open_outputs("galacticus.hdf5") as c:
+       data = c.read("Output1", ["nodeData/basicMass"], as_quantity=False)
+       # data["nodeData/basicMass"] is a plain numpy array
 
 Filtering
 ---------
@@ -100,7 +129,7 @@ Pass a boolean mask or integer index array as ``where``:
 
    with open_outputs("galacticus.hdf5") as c:
        masses = c.read("Output1", ["nodeData/basicMass"])["nodeData/basicMass"]
-       mask = masses > 1e12
+       mask = masses.value > 1e12
 
        data = c.read(
            "Output1",

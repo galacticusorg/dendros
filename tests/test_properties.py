@@ -9,8 +9,10 @@ from dendros import open_outputs
 def test_list_properties_columns(single_file):
     with open_outputs(single_file) as c:
         tbl = c.list_properties("Output1")
-    for col in ("name", "dtype", "shape", "description", "unitsInSI"):
+    for col in ("name", "dtype", "shape", "description", "units"):
         assert col in tbl.colnames
+    # The old unitsInSI column has been replaced by the human-readable units.
+    assert "unitsInSI" not in tbl.colnames
 
 
 def test_list_properties_contains_basic_mass(single_file):
@@ -36,13 +38,23 @@ def test_list_properties_description(single_file):
         assert row["description"] != ""
 
 
-def test_list_properties_units_numeric(single_file):
-    """unitsInSI should be a numeric value for datasets that have the attr."""
+def test_list_properties_units_description(single_file):
+    """The 'units' column should show the human-readable units description."""
     with open_outputs(single_file) as c:
         tbl = c.list_properties("Output1")
-    for row in tbl:
-        assert row["unitsInSI"] is not None
-        assert float(row["unitsInSI"]) > 0
+    by_name = {row["name"]: row["units"] for row in tbl}
+    # basicMass is in solar masses; diskMassStellar likewise.
+    assert by_name["basicMass"] == "Solar masses"
+    assert by_name["diskMassStellar"] == "Solar masses"
+
+
+def test_list_properties_dimensionless_units_blank(single_file):
+    """A dimensionless dataset should have an empty units description."""
+    with open_outputs(single_file) as c:
+        tbl = c.list_properties("Output1")
+    by_name = {row["name"]: row["units"] for row in tbl}
+    # 'spin' is dimensionless in the fixture, so its units description is blank.
+    assert by_name["spin"] == ""
 
 
 def test_list_properties_pandas(single_file):
