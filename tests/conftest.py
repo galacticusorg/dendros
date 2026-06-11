@@ -239,6 +239,124 @@ def history_file_varying_width(tmp_path):
     return str(p)
 
 
+# ---------------------------------------------------------------------------
+# Star formation history fixtures
+# ---------------------------------------------------------------------------
+
+
+def _write_sfh_mass(node, name, per_galaxy):
+    """Write a nested-vlen star formation history *mass* dataset.
+
+    *per_galaxy* is a list (one entry per galaxy) of lists of 1D arrays — one
+    1D array per metallicity, each of length ``n_times`` for that galaxy.  A
+    galaxy with an empty list is written as a zero-length entry, mirroring how
+    Galacticus stores galaxies with no tabulated star formation.
+    """
+    inner = h5py.vlen_dtype(np.float64)
+    outer = h5py.vlen_dtype(inner)
+    ds = node.create_dataset(name, shape=(len(per_galaxy),), dtype=outer)
+    for i, metal_arrays in enumerate(per_galaxy):
+        if len(metal_arrays) == 0:
+            ds[i] = np.empty(0, dtype=object)
+        else:
+            row = np.empty(len(metal_arrays), dtype=object)
+            for k, a in enumerate(metal_arrays):
+                row[k] = np.asarray(a, dtype=float)
+            ds[i] = row
+    return ds
+
+
+def _write_sfh_times(node, name, per_galaxy_times):
+    """Write a vlen star formation history *times* dataset (one row per galaxy)."""
+    inner = h5py.vlen_dtype(np.float64)
+    ds = node.create_dataset(name, shape=(len(per_galaxy_times),), dtype=inner)
+    for i, t in enumerate(per_galaxy_times):
+        ds[i] = np.asarray(t, dtype=float)
+    return ds
+
+
+@pytest.fixture()
+def sfh_fixedages_file(tmp_path):
+    """A lightcone file using the ``fixedAges`` star formation history method.
+
+    Three galaxies with ragged tabulations (3, 2, and 0 retained bins), so the
+    right-alignment / padding behaviour is exercised.  The metallicity axis has
+    two bins; collapsing sums them.  Expected collapsed masses and times after
+    right-alignment (width 3):
+
+    * galaxy 0: mass ``[11, 22, 33]``        times ``[1, 2, 3]``
+    * galaxy 1: mass ``[0, 44, 55]``         times ``[nan, 1.5, 2.5]``
+    * galaxy 2: mass ``[0, 0, 0]``           times ``[nan, nan, nan]``
+    """
+    p = tmp_path / "lightcone_sfh.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        # Parameters group flags the fixedAges method via countAges/ageMinimum.
+        sfh_params = f.create_group("Parameters/starFormationHistory")
+        sfh_params.attrs["countAges"] = 10
+        sfh_params.attrs["ageMinimum"] = 0.001
+        nd = f.create_group("Lightcone/Output1/nodeData")
+        per_galaxy = [
+            [np.array([1.0, 2.0, 3.0]), np.array([10.0, 20.0, 30.0])],
+            [np.array([4.0, 5.0]), np.array([40.0, 50.0])],
+            [],
+        ]
+        per_galaxy_times = [
+            np.array([1.0, 2.0, 3.0]),
+            np.array([1.5, 2.5]),
+            np.array([]),
+        ]
+        _write_sfh_mass(nd, "diskStarFormationHistoryMass", per_galaxy)
+        _write_sfh_times(nd, "diskStarFormationHistoryTimes", per_galaxy_times)
+    return str(p)
+
+
+@pytest.fixture()
+def sfh_fixed_time_file(tmp_path):
+    """A standard output whose SFH uses a shared ``time`` attribute.
+
+    Two populated galaxies (each tabulated at the same three times) and one
+    empty galaxy.  Collapsing over the two metallicities gives a fixed-length
+    2D array; the empty galaxy is filled with zeros.
+    """
+    p = tmp_path / "fixed_time_sfh.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        nd = f.create_group("Outputs/Output1/nodeData")
+        per_galaxy = [
+            [np.array([1.0, 2.0, 3.0]), np.array([10.0, 20.0, 30.0])],
+            [np.array([4.0, 5.0, 6.0]), np.array([40.0, 50.0, 60.0])],
+            [],
+        ]
+        ds = _write_sfh_mass(nd, "diskStarFormationHistoryMass", per_galaxy)
+        ds.attrs["time"] = "[1.0, 2.0, 3.0]"
+    return str(p)
+
+
+@pytest.fixture()
+def sfh_variable_time_file(tmp_path):
+    """A file with ragged per-galaxy SFH tabulations but *not* the fixedAges
+    method, so no fixed-age alignment is possible.
+
+    The ``Parameters/starFormationHistory`` group lacks ``countAges`` /
+    ``ageMinimum``, so dendros must leave the collapsed histories as a ragged
+    list and return ``None`` for the times.
+    """
+    p = tmp_path / "variable_time_sfh.hdf5"
+    with h5py.File(p, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        # An SFH parameter group that is *not* fixedAges.
+        sfh_params = f.create_group("Parameters/starFormationHistory")
+        sfh_params.attrs["timeStep"] = 0.1
+        nd = f.create_group("Outputs/Output1/nodeData")
+        per_galaxy = [
+            [np.array([1.0, 2.0, 3.0]), np.array([10.0, 20.0, 30.0])],
+            [np.array([4.0, 5.0]), np.array([40.0, 50.0])],
+        ]
+        _write_sfh_mass(nd, "diskStarFormationHistoryMass", per_galaxy)
+    return str(p)
+
+
 def _write_analysis_function1d(
     parent: h5py.Group,
     name: str,
