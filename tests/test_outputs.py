@@ -15,8 +15,30 @@ def test_list_outputs_returns_two_rows(single_file):
 def test_list_outputs_columns(single_file):
     with open_outputs(single_file) as c:
         tbl = c.list_outputs()
-    for col in ("index", "name", "time", "scale_factor", "redshift"):
+    for col in ("index", "name", "time", "scale_factor", "redshift", "output_type"):
         assert col in tbl.colnames
+
+
+def test_output_type_attribute(single_file):
+    """OutputMeta.output_type reflects the group's outputType attribute."""
+    with open_outputs(single_file) as c:
+        meta = c.outputs["Output1"]
+    assert meta.output_type == "snapshot"
+
+
+def test_output_type_absent_is_none(history_file):
+    """An output group with no outputType attribute yields None."""
+    with open_outputs(history_file) as c:
+        meta = c.outputs["Output1"]
+    assert meta.output_type is None
+
+
+def test_list_outputs_output_type_none_when_absent(history_file):
+    """The output_type table cell is None (not '') for legacy files."""
+    with open_outputs(history_file) as c:
+        tbl = c.list_outputs()
+    row = tbl[tbl["name"] == "Output1"][0]
+    assert row["output_type"] is None
 
 
 def test_output1_redshift_zero(single_file):

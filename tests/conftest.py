@@ -82,6 +82,11 @@ def _make_file(
             grp = root.create_group(f"Output{i}")
             grp.attrs["outputTime"] = out["time"]
             grp.attrs["outputExpansionFactor"] = out["a"]
+            # ``type=None`` deliberately omits the attribute, so this helper can
+            # also generate legacy files that predate ``outputType``.
+            output_type = out.get("type", "snapshot")
+            if output_type is not None:
+                grp.attrs["outputType"] = output_type
             node = grp.create_group("nodeData")
             for name, arr in out["data"].items():
                 ds = node.create_dataset(name, data=arr)
@@ -172,6 +177,62 @@ def history_file(tmp_path):
                       masses=[5555.0, 4444.0],
                       node_indices=[5000, 4000])
     return str(p)
+
+
+def _make_typed_history_file(path, output_type):
+    """Write a traceable-looking file whose outputs carry *output_type*.
+
+    Each output has a ``nodeUniqueIDBranchTip`` and ``basicMass`` dataset, so
+    the only reason tracing should fail is the ``outputType`` gate.
+    """
+    with h5py.File(path, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        root = f.create_group("Outputs")
+        for i, (t, a) in enumerate(((2.0, 0.2), (13.8, 1.0)), start=1):
+            grp = root.create_group(f"Output{i}")
+            grp.attrs["outputTime"] = t
+            grp.attrs["outputExpansionFactor"] = a
+            grp.attrs["outputType"] = output_type
+            nd = grp.create_group("nodeData")
+            nd.create_dataset(
+                "nodeUniqueIDBranchTip", data=np.array([101, 102], dtype=np.int64)
+            )
+            nd.create_dataset("basicMass", data=np.array([1.0, 2.0], dtype=float))
+    return str(path)
+
+
+@pytest.fixture()
+def lightcone_history_file(tmp_path):
+    """A file whose outputs are of type ``lightcone`` (untraceable)."""
+    return _make_typed_history_file(tmp_path / "lightcone.hdf5", "lightcone")
+
+
+@pytest.fixture()
+def node_history_file(tmp_path):
+    """A file whose outputs are of type ``node`` (untraceable)."""
+    return _make_typed_history_file(tmp_path / "node.hdf5", "node")
+
+
+@pytest.fixture()
+def mixed_type_history_file(tmp_path):
+    """A file mixing a ``snapshot`` output (Output1) and a ``lightcone`` one."""
+    path = tmp_path / "mixed.hdf5"
+    with h5py.File(path, "w") as f:
+        f.attrs["statusCompletion"] = 0
+        root = f.create_group("Outputs")
+        for i, (t, a, otype) in enumerate(
+            ((2.0, 0.2, "snapshot"), (13.8, 1.0, "lightcone")), start=1
+        ):
+            grp = root.create_group(f"Output{i}")
+            grp.attrs["outputTime"] = t
+            grp.attrs["outputExpansionFactor"] = a
+            grp.attrs["outputType"] = otype
+            nd = grp.create_group("nodeData")
+            nd.create_dataset(
+                "nodeUniqueIDBranchTip", data=np.array([101, 102], dtype=np.int64)
+            )
+            nd.create_dataset("basicMass", data=np.array([1.0, 2.0], dtype=float))
+    return str(path)
 
 
 @pytest.fixture()

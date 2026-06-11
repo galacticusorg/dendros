@@ -305,3 +305,53 @@ def test_returned_keys(history_file):
         assert key in hist
     assert hist["ids"].dtype == np.int64
     assert hist["present"].dtype == np.bool_
+
+
+# ---------------------------------------------------------------------------
+# Output-type gating: tracing is only meaningful for 'tree'/'snapshot' outputs
+# ---------------------------------------------------------------------------
+
+
+def test_trace_rejects_lightcone_outputs(lightcone_history_file):
+    """Tracing a lightcone output raises a clear ValueError."""
+    with open_outputs(lightcone_history_file) as c:
+        with pytest.raises(ValueError, match="only meaningful"):
+            c.trace_history([101], ["nodeData/basicMass"])
+
+
+def test_trace_rejects_node_outputs(node_history_file):
+    """Tracing a node output raises a clear ValueError."""
+    with open_outputs(node_history_file) as c:
+        with pytest.raises(ValueError, match="not traceable"):
+            c.trace_history([101], ["nodeData/basicMass"])
+
+
+def test_trace_error_names_offending_output(lightcone_history_file):
+    """The error message identifies the untraceable output and its type."""
+    with open_outputs(lightcone_history_file) as c:
+        with pytest.raises(ValueError, match="Output1.*lightcone"):
+            c.trace_history([101], ["nodeData/basicMass"])
+
+
+def test_trace_rejects_mixed_when_untraceable_chosen(mixed_type_history_file):
+    """A mix that includes a lightcone output is rejected by default."""
+    with open_outputs(mixed_type_history_file) as c:
+        with pytest.raises(ValueError, match="not traceable"):
+            c.trace_history([101], ["nodeData/basicMass"])
+
+
+def test_trace_allows_snapshot_subset_of_mixed(mixed_type_history_file):
+    """Restricting to the snapshot output via outputs= succeeds."""
+    with open_outputs(mixed_type_history_file) as c:
+        hist = c.trace_history(
+            [101], ["nodeData/basicMass"], outputs=["Output1"]
+        )
+    assert hist["present"].all()
+    np.testing.assert_allclose(hist["nodeData/basicMass"][0], [1.0])
+
+
+def test_trace_allows_outputs_without_type_attribute(history_file):
+    """Files with no outputType attribute (legacy) are still traceable."""
+    with open_outputs(history_file) as c:
+        hist = c.trace_history([104], ["nodeData/basicMass"])
+    assert hist["present"].all()

@@ -18,6 +18,13 @@ _RESERVED_LABELS = frozenset(
 
 _DUPLICATE_MODES = ("error", "warn", "first")
 
+# Output types for which tracing a galaxy across outputs is meaningful.  A
+# galaxy persists across ``tree`` and ``snapshot`` outputs, so its history can
+# be assembled.  In ``lightcone`` and ``node`` outputs a galaxy appears at most
+# once (or with no consistent cross-output identity), so tracing is undefined.
+_TRACEABLE_OUTPUT_TYPES = frozenset({"tree", "snapshot"})
+_UNTRACEABLE_OUTPUT_TYPES = frozenset({"node", "lightcone"})
+
 
 def _fill_value_for_dtype(dtype: np.dtype, int_sentinel: int):
     """Pick a missing-slot sentinel appropriate to *dtype*."""
@@ -132,9 +139,10 @@ def trace_galaxy_history(
         or if a requested property is missing from a chosen output.
     ValueError
         If ``properties`` contains a reserved label, if ``outputs`` is
-        empty, if the tail shape of a property differs between outputs,
-        or (by default) if an ID appears in more than one file at the
-        same output.
+        empty, if any chosen output has an ``outputType`` of ``"node"`` or
+        ``"lightcone"`` (for which tracing is undefined), if the tail shape
+        of a property differs between outputs, or (by default) if an ID
+        appears in more than one file at the same output.
     NotImplementedError
         If a property has a dtype other than integer, floating, or
         boolean.
@@ -189,6 +197,30 @@ def trace_galaxy_history(
                     f"(available: {[o.name for o in all_outputs]})."
                 )
             chosen.append(by_name[name])
+
+    # Gate on output type: tracing a galaxy across outputs is only meaningful
+    # for 'tree' and 'snapshot' outputs.  In 'lightcone' and 'node' outputs a
+    # galaxy has no persistent cross-output identity, so refuse with a clear
+    # error.  Outputs with no 'outputType' attribute (older files) are allowed.
+    untraceable = [
+        meta for meta in chosen
+        if meta.output_type in _UNTRACEABLE_OUTPUT_TYPES
+    ]
+    if untraceable:
+        offenders = ", ".join(
+            f"{meta.name} (outputType={meta.output_type!r})"
+            for meta in untraceable
+        )
+        traceable = " or ".join(f"'{t}'" for t in sorted(_TRACEABLE_OUTPUT_TYPES))
+        raise ValueError(
+            "Galaxy-history tracing is only meaningful for outputs of type "
+            f"{traceable}, but the following chosen "
+            f"output(s) are not traceable: {offenders}. A galaxy appears at "
+            "most once in 'lightcone' and 'node' outputs, so its history "
+            "cannot be assembled. Restrict to traceable outputs with the "
+            "outputs= argument, or use Collection.read to extract data from "
+            "these outputs directly."
+        )
 
     n_outputs = len(chosen)
     root = collection.output_root

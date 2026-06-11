@@ -27,6 +27,10 @@ class OutputMeta:
         Expansion factor *a*, or ``None`` if absent.
     redshift:
         Redshift *z = 1/a − 1*, computed from ``scale_factor``, or ``None``.
+    output_type:
+        Kind of output this group holds, from the ``outputType`` attribute:
+        ``"tree"``, ``"node"``, ``"snapshot"``, or ``"lightcone"``.  ``None``
+        if the attribute is absent (older Galacticus files).
     """
 
     name: str
@@ -35,6 +39,7 @@ class OutputMeta:
     time: Optional[float]
     scale_factor: Optional[float]
     redshift: Optional[float]
+    output_type: Optional[str]
 
 
 class OutputIndex:
@@ -88,6 +93,7 @@ class OutputIndex:
                     time=time,
                     scale_factor=a,
                     redshift=z,
+                    output_type=_str_or_none(attrs.get("outputType")),
                 )
             )
 
@@ -140,6 +146,7 @@ class OutputIndex:
                 "time": o.time,
                 "scale_factor": o.scale_factor,
                 "redshift": o.redshift,
+                "output_type": o.output_type,
             }
             for o in self._outputs
         ]
@@ -169,3 +176,12 @@ def _float_or_none(value) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _str_or_none(value) -> Optional[str]:
+    """Decode an HDF5 string attribute to ``str``, or ``None`` if absent."""
+    if value is None:
+        return None
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    return str(value)

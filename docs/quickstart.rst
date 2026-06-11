@@ -63,7 +63,10 @@ Listing outputs
        df  = c.list_outputs(format="pandas")
 
 The table contains columns: ``index``, ``name``, ``time``,
-``scale_factor``, and ``redshift``.
+``scale_factor``, ``redshift``, and ``output_type``.  The ``output_type``
+column reports the kind of output each group holds (``tree``, ``node``,
+``snapshot``, or ``lightcone``); it is ``None`` (a missing value) for older
+files that predate the ``outputType`` attribute.
 
 Listing properties
 ------------------
@@ -139,6 +142,15 @@ Pass a boolean mask or integer index array as ``where``:
 
 Tracing galaxy histories
 ------------------------
+
+Tracing only makes sense for outputs in which a galaxy persists across cosmic
+time — those of ``outputType`` ``tree`` or ``snapshot``.  In a ``lightcone``
+output each galaxy is seen only once, and ``node`` outputs carry no persistent
+cross-output identity, so :meth:`~dendros.Collection.trace_history` raises a
+:class:`ValueError` if any chosen output is of type ``node`` or ``lightcone``.
+Restrict to traceable outputs with the ``outputs=`` argument, or read those
+outputs directly with :meth:`~dendros.Collection.read`.  Outputs from older
+files that lack the ``outputType`` attribute are assumed traceable.
 
 Given one or more ``nodeUniqueIDBranchTip`` values, dendros can assemble each
 galaxy's full history across all outputs:
