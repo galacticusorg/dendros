@@ -19,8 +19,10 @@ from ._autocorr import autocorrelation_time, effective_sample_size
 from ._chains import ChainSet, read_chains
 from ._config import MCMCConfig, ModelParameter, parse_mcmc_config
 from ._convergence import (
+    EnsembleDriftResult,
     RhatResult,
     convergence_step,
+    ensemble_drift,
     gelman_rubin,
     geweke,
     outlier_chains,
@@ -47,11 +49,20 @@ class MCMCRun:
     ----------
     config:
         Parsed :class:`MCMCConfig`.
+    max_steps:
+        When given, retain only the last ``max_steps`` recorded steps of each
+        chain when the chain data are first read.  Intended for run-time
+        monitoring of a live chain: it bounds the per-row parse cost and speeds
+        up every downstream diagnostic, at the cost of discarding older history.
+        ``None`` (the default) reads the entire history.  Assigning to the
+        :attr:`max_steps` property later invalidates any cached chains.
     """
 
-    def __init__(self, config: MCMCConfig) -> None:
+    def __init__(self, config: MCMCConfig, *, max_steps: Optional[int] = None) -> None:
         self._config = config
         self._chains: Optional[ChainSet] = None
+        self._max_steps: Optional[int] = None
+        self.max_steps = max_steps  # validates via the setter
 
     # ------------------------------------------------------------------
     # Public properties
@@ -68,10 +79,33 @@ class MCMCRun:
         return self._config.parameters
 
     @property
+    def max_steps(self) -> Optional[int]:
+        """Retain only the last this-many steps per chain when reading (``None`` = all).
+
+        Assigning a new value invalidates the cached :attr:`chains` so the next
+        access re-reads with the new window.
+        """
+        return self._max_steps
+
+    @max_steps.setter
+    def max_steps(self, value: Optional[int]) -> None:
+        if value is not None and (not isinstance(value, int) or value <= 0):
+            raise ValueError(
+                f"max_steps must be a positive integer or None; got {value!r}"
+            )
+        if value != self._max_steps:
+            self._chains = None  # invalidate cache; re-read on next access
+        self._max_steps = value
+
+    @property
     def chains(self) -> ChainSet:
-        """Lazily-loaded :class:`ChainSet` for this run."""
+        """Lazily-loaded :class:`ChainSet` for this run.
+
+        Honors :attr:`max_steps`: when set, only the last ``max_steps`` steps of
+        each chain are read and cached.
+        """
         if self._chains is None:
-            self._chains = read_chains(self._config)
+            self._chains = read_chains(self._config, max_steps=self._max_steps)
         return self._chains
 
     # ------------------------------------------------------------------
@@ -136,6 +170,28 @@ class MCMCRun:
     ) -> np.ndarray:
         """Convenience wrapper around :func:`dendros.geweke`."""
         return geweke(self.chains, first=first, last=last)
+
+    def ensemble_drift(
+        self,
+        *,
+        drop_chains: Sequence[int] = (),
+        burn: int = 0,
+        first: float = 0.5,
+        last: float = 0.5,
+    ) -> "EnsembleDriftResult":
+        """Convenience wrapper around :func:`dendros.ensemble_drift`.
+
+        The effect-size stationarity check appropriate for the ``differentialEvolution``
+        ensemble: gate on ``result.max_drift() < threshold`` rather than on
+        Gelman-Rubin / Geweke, which over-reject for large ensembles.
+        """
+        return ensemble_drift(
+            self.chains,
+            drop_chains=drop_chains,
+            burn=burn,
+            first=first,
+            last=last,
+        )
 
     def outlier_chains(
         self,
@@ -389,13 +445,23 @@ class MCMCRun:
         pass
 
 
-def open_mcmc(config_path: Union[str, "Path"]) -> MCMCRun:
+def open_mcmc(
+    config_path: Union[str, "Path"], *, max_steps: Optional[int] = None
+) -> MCMCRun:
     """Open an MCMC run by parsing its config XML.
 
     Parameters
     ----------
     config_path:
         Path to the Galacticus MCMC ``<parameters>`` XML file.
+    max_steps:
+        When given, retain only the last ``max_steps`` recorded steps of each
+        chain.  Intended for run-time monitoring of a live chain, where only the
+        recent window is of interest: it bounds the per-row parse cost and
+        speeds up every downstream diagnostic (R-hat, ESS, autocorrelation).
+        ``None`` (the default) reads the full history — use that for definitive,
+        post-hoc analysis (corner plots, final convergence, posterior sampling)
+        where truncation would bias the result.
 
     Returns
     -------
@@ -407,5 +473,10 @@ def open_mcmc(config_path: Union[str, "Path"]) -> MCMCRun:
     >>> with open_mcmc("mcmcConfig.xml") as run:
     ...     print(run.parameters)
     ...     chains = run.chains
+
+    Fast run-time monitoring on the last 1000 steps::
+
+    >>> with open_mcmc("mcmcConfig.xml", max_steps=1000) as run:
+    ...     rhat = run.gelman_rubin()
     """
-    return MCMCRun(parse_mcmc_config(config_path))
+    return MCMCRun(parse_mcmc_config(config_path), max_steps=max_steps)

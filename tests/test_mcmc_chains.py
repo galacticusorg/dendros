@@ -45,6 +45,55 @@ def test_read_chains_basic(mcmc_de_run):
     assert [c.chain_index for c in chains] == [0, 1]
 
 
+def test_read_chains_max_steps_keeps_tail(mcmc_de_run):
+    cfg = parse_mcmc_config(mcmc_de_run)
+    full = read_chains(cfg)
+    tail = read_chains(cfg, max_steps=3)
+    assert len(tail) == 2
+    for c_full, c_tail in zip(full, tail):
+        assert c_tail.n_steps == 3
+        # The last 3 recorded steps, in order.
+        np.testing.assert_array_equal(c_tail.step, c_full.step[-3:])
+        np.testing.assert_array_equal(c_tail.step, [3, 4, 5])
+        np.testing.assert_allclose(c_tail.state, c_full.state[-3:])
+        np.testing.assert_allclose(c_tail.log_posterior, c_full.log_posterior[-3:])
+        assert c_tail.chain_index == c_full.chain_index
+
+
+def test_read_chains_max_steps_exceeding_length_reads_all(mcmc_de_run):
+    cfg = parse_mcmc_config(mcmc_de_run)
+    chains = read_chains(cfg, max_steps=1000)
+    for c in chains:
+        assert c.n_steps == 5
+
+
+def test_read_chains_max_steps_invalid_raises(mcmc_de_run):
+    cfg = parse_mcmc_config(mcmc_de_run)
+    for bad in (0, -1):
+        with pytest.raises(ValueError, match="max_steps"):
+            read_chains(cfg, max_steps=bad)
+
+
+def test_open_mcmc_max_steps(mcmc_de_run):
+    with open_mcmc(mcmc_de_run, max_steps=2) as run:
+        assert run.max_steps == 2
+        for c in run.chains:
+            assert c.n_steps == 2
+            np.testing.assert_array_equal(c.step, [4, 5])
+
+
+def test_max_steps_setter_invalidates_cache(mcmc_de_run):
+    with open_mcmc(mcmc_de_run) as run:
+        assert run.max_steps is None
+        assert run.chains[0].n_steps == 5      # full read, cached
+        run.max_steps = 2                        # must invalidate cache
+        assert run.chains[0].n_steps == 2
+        run.max_steps = None                     # back to full
+        assert run.chains[0].n_steps == 5
+    with pytest.raises(ValueError, match="max_steps"):
+        run.max_steps = 0
+
+
 def test_read_chains_no_files_raises(tmp_path):
     cfg = parse_mcmc_config(
         # Use the independent fixture's template but with a log root that has

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, List, Optional, Sequence, Tuple, Union
@@ -215,13 +216,18 @@ def discover_chain_files(log_file_root: Union[str, "Path"]) -> List[Path]:
     return [p for p in candidates if _RANK_SUFFIX.search(p.name)]
 
 
-def read_chains(config: MCMCConfig) -> ChainSet:
+def read_chains(config: MCMCConfig, *, max_steps: Optional[int] = None) -> ChainSet:
     """Discover and read all per-rank chain files for *config*.
 
     Parameters
     ----------
     config:
         Parsed :class:`MCMCConfig`.
+    max_steps:
+        When given, retain only the last ``max_steps`` recorded steps of each
+        chain (see :func:`_read_chain_file`).  Speeds up reading and every
+        downstream diagnostic for run-time monitoring, where only the recent
+        window matters.  ``None`` (the default) reads the entire history.
 
     Returns
     -------
@@ -238,7 +244,7 @@ def read_chains(config: MCMCConfig) -> ChainSet:
             f"No chain log files found matching "
             f"'{config.log_file_root}_[0-9][0-9][0-9][0-9].log'"
         )
-    chains = [_read_chain_file(p, config) for p in files]
+    chains = [_read_chain_file(p, config, max_steps=max_steps) for p in files]
     return ChainSet(config, chains)
 
 
@@ -247,16 +253,35 @@ def read_chains(config: MCMCConfig) -> ChainSet:
 # ---------------------------------------------------------------------------
 
 
-def _read_chain_file(path: Path, config: MCMCConfig) -> Chain:
-    """Parse a single ``<root>_NNNN.log`` file."""
+def _read_chain_file(
+    path: Path, config: MCMCConfig, *, max_steps: Optional[int] = None
+) -> Chain:
+    """Parse a single ``<root>_NNNN.log`` file.
+
+    Parameters
+    ----------
+    max_steps:
+        When given, retain only the last ``max_steps`` recorded steps of the
+        chain.  Data lines are buffered in a bounded :class:`collections.deque`
+        during the scan, so only the retained rows are tokenized and converted
+        to floats — the per-row parse cost (which dominates read time) scales
+        with ``max_steps`` rather than the full chain length.  ``None`` (the
+        default) reads the entire chain.  This is intended for run-time
+        monitoring of a live chain, where only the recent window is of interest
+        and full-history parsing is wastefully slow.
+    """
     rank = _rank_from_filename(path)
     n_params = len(config.parameters)
     n_state_cols = _state_column_count(config.simulation_kind, n_params)
     expected_total_cols = 6 + n_state_cols
 
+    if max_steps is not None and max_steps <= 0:
+        raise ValueError(f"max_steps must be a positive integer or None; got {max_steps!r}")
+
     header_param_names: Optional[List[str]] = None
-    rows: List[Tuple[int, int, float, bool, float, float, List[float]]] = []
-    velocities: List[List[float]] = [] if config.simulation_kind == "particleSwarm" else []
+    # Buffer raw data lines; bound to the last `max_steps` when requested so
+    # that earlier rows are never tokenized/float-parsed.
+    data_lines: "deque[str]" = deque(maxlen=max_steps)
 
     with path.open("r") as fh:
         for raw in fh:
@@ -272,31 +297,35 @@ def _read_chain_file(path: Path, config: MCMCConfig) -> Chain:
             if line.startswith('"'):
                 # Defensive: skip quoted lines that some tools produce.
                 continue
+            data_lines.append(line)
 
-            tokens = line.split()
-            if len(tokens) < expected_total_cols:
-                raise ValueError(
-                    f"Chain file {path} line has {len(tokens)} columns; "
-                    f"expected at least {expected_total_cols} (= 6 + "
-                    f"{n_state_cols} state/velocity columns for "
-                    f"simulation_kind={config.simulation_kind!r}, "
-                    f"n_params={n_params})."
-                )
+    rows: List[Tuple[int, int, float, bool, float, float, List[float]]] = []
+    velocities: List[List[float]] = [] if config.simulation_kind == "particleSwarm" else []
+    for line in data_lines:
+        tokens = line.split()
+        if len(tokens) < expected_total_cols:
+            raise ValueError(
+                f"Chain file {path} line has {len(tokens)} columns; "
+                f"expected at least {expected_total_cols} (= 6 + "
+                f"{n_state_cols} state/velocity columns for "
+                f"simulation_kind={config.simulation_kind!r}, "
+                f"n_params={n_params})."
+            )
 
-            step = int(float(tokens[0]))
-            chain_idx = int(float(tokens[1]))
-            eval_t = float(tokens[2])
-            conv = _parse_bool(tokens[3])
-            logp = float(tokens[4])
-            logl = float(tokens[5])
-            state_vals = [float(t) for t in tokens[6 : 6 + n_params]]
-            rows.append((step, chain_idx, eval_t, conv, logp, logl, state_vals))
+        step = int(float(tokens[0]))
+        chain_idx = int(float(tokens[1]))
+        eval_t = float(tokens[2])
+        conv = _parse_bool(tokens[3])
+        logp = float(tokens[4])
+        logl = float(tokens[5])
+        state_vals = [float(t) for t in tokens[6 : 6 + n_params]]
+        rows.append((step, chain_idx, eval_t, conv, logp, logl, state_vals))
 
-            if config.simulation_kind == "particleSwarm":
-                vel_vals = [
-                    float(t) for t in tokens[6 + n_params : 6 + 2 * n_params]
-                ]
-                velocities.append(vel_vals)
+        if config.simulation_kind == "particleSwarm":
+            vel_vals = [
+                float(t) for t in tokens[6 + n_params : 6 + 2 * n_params]
+            ]
+            velocities.append(vel_vals)
 
     if header_param_names is not None:
         _validate_header_param_names(header_param_names, config, path)
