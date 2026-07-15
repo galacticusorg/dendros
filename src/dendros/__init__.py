@@ -45,7 +45,12 @@ from ._mcmc import (
 from ._outputs import OutputIndex, OutputMeta
 from ._star_formation import sfh_collapse_metallicities, sfh_times
 
-__version__ = "0.5.0"
+try:
+    from importlib.metadata import PackageNotFoundError, version as _version
+
+    __version__ = _version("dendros")
+except PackageNotFoundError:  # package is not installed
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "Chain",
