@@ -25,8 +25,10 @@ from ._config import (
     parse_mcmc_config,
 )
 from ._convergence import (
+    EnsembleDriftResult,
     RhatResult,
     convergence_step,
+    ensemble_drift,
     gelman_rubin,
     geweke,
     outlier_chains,
@@ -56,6 +58,7 @@ __all__ = [
     "PosteriorSamples",
     "PriorSpec",
     "ProjectionPursuitResult",
+    "EnsembleDriftResult",
     "RhatResult",
     "acceptance_rate",
     "acceptance_rate_trace",
@@ -66,6 +69,7 @@ __all__ = [
     "corner_plot",
     "effective_sample_size",
     "emit_parameter_files",
+    "ensemble_drift",
     "gelman_rubin",
     "geweke",
     "maximum_likelihood",

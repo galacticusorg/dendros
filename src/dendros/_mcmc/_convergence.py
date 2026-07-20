@@ -386,6 +386,181 @@ def geweke(
 
 
 # ---------------------------------------------------------------------------
+# Ensemble-mean drift (effect-size stationarity check for ensemble samplers)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EnsembleDriftResult:
+    """Result of :func:`ensemble_drift`.
+
+    Attributes
+    ----------
+    drift:
+        ``(n_params,)`` standardized drift of the ensemble mean between the
+        early and late windows: ``|mean_late - mean_early| / sigma_post``.  A
+        dimensionless *effect size* — the shift of the pooled ensemble mean
+        expressed in units of the posterior width.
+    delta_mean:
+        ``(n_params,)`` signed ``mean_late - mean_early`` (model units).
+    sigma_post:
+        ``(n_params,)`` pooled ensemble standard deviation over the analysis
+        span (all surviving walkers × steps after ``burn``), i.e. the posterior
+        width used to standardize :attr:`drift`.
+    parameter_names:
+        Names of the parameters along ``axis=0``.
+    early_steps, late_steps:
+        ``(start, stop)`` row-index half-open ranges (into the burned span) of
+        the two windows that were compared.
+    chains_used:
+        ``chain_index`` values of the chains that contributed.
+
+    Notes
+    -----
+    This is deliberately an *effect-size* statistic, not a significance test.
+    For an interacting ensemble sampler (e.g. Galacticus ``differentialEvolution``)
+    with many walkers, the ensemble mean is estimated so precisely that a
+    significance test (Gelman-Rubin, Geweke, a pooled z-test) rejects
+    stationarity on a *negligible* drift — it has too much power.  The drift
+    effect size answers the question that actually matters for calibration:
+    "has the ensemble mean stopped moving, relative to the posterior width?"
+    Gate on ``drift.max() < threshold`` (e.g. ``0.1``), with the threshold a
+    human choice.  Pair with :func:`effective_sample_size` /
+    :func:`autocorrelation_time` for the independent-sample count.
+    """
+
+    drift: np.ndarray
+    delta_mean: np.ndarray
+    sigma_post: np.ndarray
+    parameter_names: Tuple[str, ...]
+    early_steps: Tuple[int, int]
+    late_steps: Tuple[int, int]
+    chains_used: Tuple[int, ...]
+
+    def max_drift(self) -> float:
+        """Largest standardized drift over all parameters."""
+        return float(np.nanmax(self.drift))
+
+    def worst_parameter(self) -> str:
+        """Name of the parameter with the largest standardized drift."""
+        return self.parameter_names[int(np.nanargmax(self.drift))]
+
+
+def ensemble_drift(
+    chains: ChainSet,
+    *,
+    drop_chains: Sequence[int] = (),
+    burn: int = 0,
+    first: float = 0.5,
+    last: float = 0.5,
+) -> EnsembleDriftResult:
+    """Standardized drift of the ensemble mean between an early and late window.
+
+    Pools all surviving walkers to form the ensemble at each step, then compares
+    the pooled mean over an early window against a late window and reports the
+    shift in units of the posterior width — an *effect-size* stationarity check
+    appropriate for interacting ensemble samplers, where per-walker
+    Gelman-Rubin / Geweke are inflated by the long integrated autocorrelation
+    time and, being significance tests, reject on negligible drift once the
+    ensemble is large (see :class:`EnsembleDriftResult` notes).
+
+    For each parameter,
+
+    .. math::
+
+        \\mathrm{drift} = \\frac{|\\bar{x}_{\\rm late} - \\bar{x}_{\\rm early}|}
+                               {\\sigma_{\\rm post}}
+
+    where the means pool every surviving walker and every step in each window,
+    and :math:`\\sigma_{\\rm post}` is the pooled standard deviation over the
+    whole (burned) analysis span.
+
+    Parameters
+    ----------
+    chains:
+        :class:`ChainSet`.  All surviving chains are truncated to the shortest
+        length before windowing.
+    drop_chains:
+        Iterable of ``chain_index`` values to exclude (e.g. the output of
+        :func:`outlier_chains`).
+    burn:
+        Number of leading rows to drop from every chain before windowing, to
+        exclude burn-in.  Compare two *late* windows by burning first: the
+        full-run first half otherwise carries the approach-to-stationarity and
+        inflates the drift.
+    first, last:
+        Fractions in ``(0, 1]`` giving the lengths of the early and late
+        windows within the burned span.  Must satisfy ``first + last <= 1`` so
+        the windows do not overlap.  Default ``0.5``/``0.5`` (compare the two
+        halves of the burned span).
+
+    Returns
+    -------
+    EnsembleDriftResult
+
+    Raises
+    ------
+    ValueError
+        If no chains survive ``drop_chains``, the fractions are out of range or
+        overlap, or ``burn`` leaves too few rows to form both windows.
+    """
+    if not (0.0 < first <= 1.0):
+        raise ValueError(f"first must be in (0, 1]; got {first}")
+    if not (0.0 < last <= 1.0):
+        raise ValueError(f"last must be in (0, 1]; got {last}")
+    if first + last > 1.0:
+        raise ValueError(
+            f"first + last must be <= 1 (non-overlapping windows); "
+            f"got first={first}, last={last}"
+        )
+    if burn < 0:
+        raise ValueError(f"burn must be >= 0; got {burn}")
+
+    drop = set(int(i) for i in drop_chains)
+    keep = [c for c in chains if c.chain_index not in drop]
+    if not keep:
+        raise ValueError(
+            f"ensemble_drift requires at least 1 chain; got 0 after dropping "
+            f"{sorted(drop)!r}."
+        )
+
+    n_min = min(c.n_steps for c in keep)
+    span = n_min - burn
+    n1 = int(span * first)
+    n2 = int(span * last)
+    if span < 2 or n1 < 1 or n2 < 1:
+        raise ValueError(
+            f"Too few steps after burn: shortest chain has {n_min} rows, "
+            f"burn={burn} leaves {span}; first={first}, last={last} give "
+            f"windows of {n1} and {n2} rows."
+        )
+
+    # (n_keep, span, n_params) view of the burned span.
+    block = np.stack([c.state[burn:n_min] for c in keep], axis=0)
+    n_params = block.shape[2]
+
+    early = block[:, :n1, :].reshape(-1, n_params)         # pooled walkers x steps
+    late = block[:, span - n2:, :].reshape(-1, n_params)
+    allspan = block.reshape(-1, n_params)
+
+    mean_early = early.mean(axis=0)
+    mean_late = late.mean(axis=0)
+    delta = mean_late - mean_early
+    sigma = allspan.std(axis=0, ddof=1)
+    drift = np.where(sigma > 0, np.abs(delta) / np.where(sigma > 0, sigma, 1.0), np.nan)
+
+    return EnsembleDriftResult(
+        drift=drift,
+        delta_mean=delta,
+        sigma_post=sigma,
+        parameter_names=chains.config.parameter_names,
+        early_steps=(0, n1),
+        late_steps=(span - n2, span),
+        chains_used=tuple(c.chain_index for c in keep),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Outlier chains
 # ---------------------------------------------------------------------------
 

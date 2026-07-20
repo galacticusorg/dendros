@@ -5,7 +5,9 @@ import numpy as np
 import pytest
 
 from dendros import (
+    EnsembleDriftResult,
     convergence_step,
+    ensemble_drift,
     gelman_rubin,
     geweke,
     open_mcmc,
@@ -330,3 +332,73 @@ def test_run_convergence_methods_smoketest(mcmc_de_run):
         assert z.shape == (2, 2)
         # outlier_chains on so few rows returns empty.
         assert run.outlier_chains() == ()
+        # ensemble_drift is wired up.
+        d = run.ensemble_drift(first=0.4, last=0.4)
+        assert isinstance(d, EnsembleDriftResult)
+        assert d.drift.shape == (2,)
+
+
+# ---------------------------------------------------------------------------
+# ensemble_drift
+# ---------------------------------------------------------------------------
+
+
+def test_ensemble_drift_stationary_is_small(build_chain_set):
+    """Stationary ensemble: standardized drift ~ 0 (well under a 0.1 gate)."""
+    rng = np.random.default_rng(0)
+    chains = build_chain_set(("a", "b"), _well_mixed_chains(rng, n_chains=64, n_steps=1000))
+    res = ensemble_drift(chains)
+    assert isinstance(res, EnsembleDriftResult)
+    assert res.drift.shape == (2,)
+    # Pooling 64 chains x hundreds of steps pins the mean; drift is tiny.
+    assert res.max_drift() < 0.1
+    assert res.sigma_post.shape == (2,)
+    # Windows tile the full span by default (first=last=0.5).
+    assert res.early_steps == (0, 500)
+    assert res.late_steps == (500, 1000)
+
+
+def test_ensemble_drift_detects_linear_trend(build_chain_set):
+    """A ramp in the mean produces a large standardized drift on the right param."""
+    n = 1000
+    ramp = np.linspace(0.0, 5.0, n)                 # drifts by 5 sigma-ish over the run
+    states = []
+    rng = np.random.default_rng(1)
+    for _ in range(32):
+        s = rng.normal(size=(n, 2))
+        s[:, 0] += ramp                              # param 0 drifts, param 1 stationary
+        states.append(s)
+    chains = build_chain_set(("drifter", "stable"), states)
+    res = ensemble_drift(chains)
+    assert res.drift[0] > 1.0                        # large effect size on the drifter
+    assert res.drift[1] < 0.1                        # stable parameter stays put
+    assert res.worst_parameter() == "drifter"
+
+
+def test_ensemble_drift_burn_removes_burnin(build_chain_set):
+    """Burning the leading transient collapses the measured drift."""
+    n = 2000
+    transient = np.where(np.arange(n) < 500, np.linspace(4.0, 0.0, n), 0.0)
+    states = []
+    rng = np.random.default_rng(2)
+    for _ in range(48):
+        s = rng.normal(size=(n, 1))
+        s[:, 0] += transient                         # burn-in only in first 500 steps
+        states.append(s)
+    chains = build_chain_set(("p",), states)
+    full = ensemble_drift(chains).drift[0]
+    burned = ensemble_drift(chains, burn=800).drift[0]
+    assert burned < full                             # dropping burn-in reduces drift
+    assert burned < 0.1
+
+
+def test_ensemble_drift_drop_chains_and_validation(build_chain_set):
+    rng = np.random.default_rng(3)
+    chains = build_chain_set(("a", "b"), _well_mixed_chains(rng, n_chains=8, n_steps=400))
+    res = ensemble_drift(chains, drop_chains=[0, 1])
+    assert res.chains_used == (2, 3, 4, 5, 6, 7)
+    for bad in dict(first=0.0), dict(first=1.5), dict(last=0.0), dict(first=0.6, last=0.6):
+        with pytest.raises(ValueError):
+            ensemble_drift(chains, **bad)
+    with pytest.raises(ValueError, match="burn"):
+        ensemble_drift(chains, burn=100000)
