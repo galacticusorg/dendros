@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dendros"
-version = "0.5.0"
+dynamic = ["version"]
 authors = [
   { name="Andrew Benson", email="abenson@carnegiescience.edu" },
 ]
@@ -55,6 +55,8 @@ docs = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
