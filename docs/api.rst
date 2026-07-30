@@ -161,6 +161,8 @@ Model prediction vectors
 .. autoclass:: dendros.PredictionSet
    :members:
 
+.. automethod:: dendros.PredictionSet.records_by_chain
+
 .. autoclass:: dendros.PredictionSeries
    :members:
 

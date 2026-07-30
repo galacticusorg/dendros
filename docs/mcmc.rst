@@ -221,6 +221,14 @@ Three properties of these files are easy to get wrong, and
 * **Posterior weighting.**  Accepted states persist for a variable number of
   steps, so use ``paired.multiplicity`` as sample weights for any
   posterior-averaged quantity.
+* **A file's name identifies the evaluating process, not the chain.**  Under
+  Galacticus' ``[loadBalance]=true`` (its default) any process may evaluate any
+  chain's proposal.  Newer runs record the chain index in each row and
+  :meth:`~dendros.PredictionSet.records_by_chain` attributes records by it, so
+  this is handled transparently.  Files predating that column can only be
+  attributed to the process that wrote them, which is valid only if load
+  balancing was off; the symptom of it not having been is accepted steps of a
+  chain having no record in that chain's own file.
 
 Always pass ``files=`` from :func:`~dendros.index_prediction_files` when reading
 many constraints: a production run's samples directory holds hundreds of

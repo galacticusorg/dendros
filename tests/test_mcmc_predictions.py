@@ -209,3 +209,86 @@ def test_paired_empty_when_nothing_matches(samples_dir, build_chain_set):
     pp = read_predictions(samples_dir, "c").paired(chains)
     assert pp.n_pairs == 0
     assert pp.state.shape == (0, 1)
+
+
+def _write_samples_with_chain(path, rows, *, abscissa=(1.0,), writer=0):
+    """Write a sample file in the current format: step, chain index, values."""
+    with open(path, "w") as fh:
+        fh.write(f"# Sampled halo mass functions written by process {writer:04d}\n")
+        fh.write(" # Masses:    " + "  ".join(repr(float(a)) for a in abscissa) + "\n")
+        for step, chain, *values in rows:
+            fh.write(
+                f"   {step}   {chain}   " + "  ".join(repr(float(v)) for v in values) + "\n"
+            )
+
+
+def test_chain_index_column_detected(samples_dir):
+    _write_samples_with_chain(
+        samples_dir / "c_0000.txt", [(1, 0, 10.0), (2, 3, 20.0)], abscissa=(1.0,)
+    )
+    ps = read_predictions(samples_dir, "c")
+    assert ps[0].has_chain_index
+    np.testing.assert_array_equal(ps[0].record_chain, [0, 3])
+    np.testing.assert_array_equal(ps[0].step, [1, 2])
+    np.testing.assert_allclose(ps[0].prediction.ravel(), [10.0, 20.0])
+
+
+def test_legacy_files_without_chain_index_still_read(samples_dir):
+    _write_samples(samples_dir / "c_0000.txt", [1, 2], [[10.0], [20.0]], abscissa=(1.0,))
+    ps = read_predictions(samples_dir, "c")
+    assert not ps[0].has_chain_index
+    assert ps[0].record_chain is None
+    np.testing.assert_allclose(ps[0].prediction.ravel(), [10.0, 20.0])
+
+
+def test_wrong_column_count_is_rejected(samples_dir):
+    # Three values against a two-point abscissa is neither format.
+    with open(samples_dir / "c_0000.txt", "w") as fh:
+        fh.write("# header\n # Masses: 1.0 2.0\n")
+        fh.write("  1  2.0 3.0 4.0 5.0\n")
+    with pytest.raises(ValueError, match="columns"):
+        read_predictions(samples_dir, "c")
+
+
+def test_records_attributed_by_chain_index_not_by_file(samples_dir):
+    # Load balancing: process 0 evaluated a step belonging to chain 1, and vice
+    # versa.  Attribution must follow the chain index, not the file name.
+    _write_samples_with_chain(
+        samples_dir / "c_0000.txt", [(1, 0, 10.0), (2, 1, 99.0)], writer=0
+    )
+    _write_samples_with_chain(
+        samples_dir / "c_0001.txt", [(1, 1, 20.0), (2, 0, 88.0)], writer=1
+    )
+    records = read_predictions(samples_dir, "c").records_by_chain()
+    np.testing.assert_array_equal(records[0][0], [1, 2])
+    np.testing.assert_allclose(records[0][1].ravel(), [10.0, 88.0])
+    np.testing.assert_array_equal(records[1][0], [1, 2])
+    np.testing.assert_allclose(records[1][1].ravel(), [20.0, 99.0])
+
+
+def test_paired_uses_chain_index_under_load_balancing(samples_dir, build_chain_set):
+    # Chain 0 accepts at step 2, chain 1 at step 3.  Each chain's record was
+    # written by the *other* process, as load balancing permits.
+    s0 = np.array([[0.0], [1.0], [1.0]])
+    s1 = np.array([[5.0], [5.0], [6.0]])
+    chains = build_chain_set(["p/a"], [s0, s1])
+    _write_samples_with_chain(
+        samples_dir / "c_0000.txt", [(2, 1, 0.0), (3, 1, 77.0)], writer=0
+    )
+    _write_samples_with_chain(
+        samples_dir / "c_0001.txt", [(2, 0, 66.0), (3, 0, 0.0)], writer=1
+    )
+    pp = read_predictions(samples_dir, "c").paired(chains, step_offset=0)
+    assert pp.n_pairs == 2
+    by_chain = dict(zip(pp.chain_index.tolist(), pp.prediction.ravel().tolist()))
+    # Chain 0's acceptance at step 2 must pick up 66.0, written by process 1.
+    assert by_chain[0] == pytest.approx(66.0)
+    # Chain 1's acceptance at step 3 must pick up 77.0, written by process 0.
+    assert by_chain[1] == pytest.approx(77.0)
+
+
+def test_mixed_formats_rejected(samples_dir):
+    _write_samples_with_chain(samples_dir / "c_0000.txt", [(1, 0, 10.0)])
+    _write_samples(samples_dir / "c_0001.txt", [1], [[20.0]], abscissa=(1.0,))
+    with pytest.raises(ValueError, match="chain index"):
+        read_predictions(samples_dir, "c").records_by_chain()

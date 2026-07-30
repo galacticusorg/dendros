@@ -29,6 +29,19 @@ rather than assuming; pass ``step_offset`` to override.
 In either convention, records must be *joined* to chain rows on the step index.
 Step indices are not contiguous — proposals rejected on the prior never reach the
 likelihood — so records cannot be assumed to align with chain rows positionally.
+A record labelled step ``0`` is the evaluation of the initial state, made before
+stepping begins; the chain log has no row for it.
+
+**A file's name identifies the process that evaluated the model, not the chain.**
+Under Galacticus' ``[loadBalance]=true`` (its default) any process may evaluate
+any chain's proposal and write the record.  Newer runs record the chain index
+alongside the step, and :meth:`PredictionSet.records_by_chain` attributes records
+by it, so load balancing is handled transparently.  Files written before that
+column was added carry no chain index and can only be attributed wholesale to the
+process that wrote them, which is valid only if load balancing was off — the
+symptom of it not having been is accepted steps of a chain having no record in
+that chain's own file.  The two layouts are distinguished by row width against
+the abscissa in the header.
 """
 from __future__ import annotations
 
@@ -78,6 +91,11 @@ class PredictionSeries:
         ``(n_records,)`` integer step index exactly as recorded in the file.  It
         is *not* necessarily comparable with :attr:`dendros.Chain.step` — see the
         module docstring — so use :meth:`PredictionSet.paired` to align them.
+    record_chain:
+        ``(n_records,)`` chain index each record belongs to, when the file
+        records one; ``None`` for files written before that column was added.
+        Under load balancing this differs from :attr:`chain_index`, which is only
+        the process that wrote the file.
     prediction:
         ``(n_records, n_bins)`` model prediction vectors.
     """
@@ -86,10 +104,16 @@ class PredictionSeries:
     path: Path
     step: np.ndarray
     prediction: np.ndarray
+    record_chain: Optional[np.ndarray] = None
 
     @property
     def n_records(self) -> int:
         return int(self.step.size)
+
+    @property
+    def has_chain_index(self) -> bool:
+        """Whether records carry their own chain index."""
+        return self.record_chain is not None
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +223,37 @@ class PredictionSet:
         """Total records across ranks, including unpairable rejected-step ones."""
         return sum(s.n_records for s in self._series)
 
+    def records_by_chain(self) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
+        """Return ``{chain_index: (step, prediction)}``, pooled across files.
+
+        When records carry their own chain index they are attributed by it, so
+        the result is correct even under load balancing, where a chain's model
+        may have been evaluated and written by any process.  Otherwise each file
+        is attributed wholesale to the process that wrote it, which is only valid
+        if load balancing was off.
+        """
+        tagged = [s for s in self._series if s.record_chain is not None]
+        if tagged and len(tagged) != len(self._series):
+            raise ValueError(
+                f"{self.label!r}: some prediction files carry a chain index and "
+                f"others do not; they cannot have come from one run"
+            )
+        if not tagged:
+            return {s.chain_index: (s.step, s.prediction) for s in self._series}
+
+        parts: Dict[int, List[Tuple[np.ndarray, np.ndarray]]] = {}
+        for s in self._series:
+            for c in np.unique(s.record_chain):
+                mask = s.record_chain == c
+                parts.setdefault(int(c), []).append((s.step[mask], s.prediction[mask]))
+        out = {}
+        for c, chunks in parts.items():
+            step = np.concatenate([k for k, _ in chunks])
+            prediction = np.concatenate([v for _, v in chunks], axis=0)
+            order = np.argsort(step, kind="stable")
+            out[c] = (step[order], prediction[order])
+        return out
+
     def step_offset(self, chains: ChainSet) -> int:
         """Detect which step-labelling convention this run used.
 
@@ -215,17 +270,18 @@ class PredictionSet:
         :meth:`paired` if the run predates the labelling fix.
         """
         by_rank = {c.chain_index: c for c in chains}
+        records = self.records_by_chain()
         hits_by_offset = {}
         for offset in SAMPLE_STEP_OFFSETS:
             hits = 0
-            for s in self._series:
-                chain = by_rank.get(s.chain_index)
-                if chain is None or chain.step.size < 2 or s.step.size == 0:
+            for index, (record_step, _) in records.items():
+                chain = by_rank.get(index)
+                if chain is None or chain.step.size < 2 or record_step.size == 0:
                     continue
                 changed = np.zeros(chain.step.size, bool)
                 changed[1:] = np.any(chain.state[1:] != chain.state[:-1], axis=1)
                 accepted = chain.step[changed]
-                shifted = np.sort(s.step + offset)
+                shifted = np.sort(record_step + offset)
                 idx = np.searchsorted(shifted, accepted)
                 ok = (idx < shifted.size) & (
                     shifted[np.minimum(idx, shifted.size - 1)] == accepted
@@ -305,10 +361,12 @@ class PredictionSet:
         steps: List[np.ndarray] = []
         mults: List[np.ndarray] = []
 
-        for s in self._series:
-            if s.chain_index in drop:
+        for index, (record_step, record_prediction) in sorted(
+            self.records_by_chain().items()
+        ):
+            if index in drop:
                 continue
-            chain = by_rank.get(s.chain_index)
+            chain = by_rank.get(index)
             if chain is None:
                 continue
 
@@ -337,10 +395,10 @@ class PredictionSet:
             nxt[-1] = step[-1] + 1
             acc_mult = nxt - acc_step
 
-            order = np.argsort(s.step)
-            sstep = s.step[order] + offset
+            order = np.argsort(record_step)
+            sstep = record_step[order] + offset
 
-            proposal = proposals_by_rank.get(s.chain_index)
+            proposal = proposals_by_rank.get(index)
             if proposal is None:
                 # Only accepted steps are attributable; join on those.
                 target_step = acc_step
@@ -369,9 +427,9 @@ class PredictionSet:
                 continue
 
             states.append(target_state[ok])
-            preds.append(s.prediction[order][hit[ok]])
+            preds.append(record_prediction[order][hit[ok]])
             logls.append(target_logl[ok])
-            ranks.append(np.full(int(ok.sum()), s.chain_index, dtype=np.int64))
+            ranks.append(np.full(int(ok.sum()), index, dtype=np.int64))
             steps.append(target_step[ok])
             mults.append(target_mult[ok])
 
@@ -567,15 +625,35 @@ def _read_prediction_file(
                 sum(1 for r in rows if r.size == w), w))
             table = np.vstack([r for r in rows if r.size == n_col])
         step = table[:, 0].astype(np.int64)
-        prediction = table[:, 1:]
+        # Files written before the chain-index column was added hold
+        # `step` + one value per abscissa point; newer ones interpose the chain
+        # index.  The abscissa in the header settles which this is.
+        n_bins = abscissa.size if abscissa is not None else None
+        if n_bins is not None and table.shape[1] == n_bins + 2:
+            record_chain = table[:, 1].astype(np.int64)
+            prediction = table[:, 2:]
+        elif n_bins is not None and table.shape[1] != n_bins + 1:
+            raise ValueError(
+                f"{path}: rows have {table.shape[1]} columns; expected "
+                f"{n_bins + 1} (step + {n_bins} values) or {n_bins + 2} "
+                f"(step + chain index + {n_bins} values)"
+            )
+        else:
+            record_chain = None
+            prediction = table[:, 1:]
     else:
         n_bins = abscissa.size if abscissa is not None else 0
         prediction = np.empty((0, n_bins))
         step = np.empty(0, dtype=np.int64)
+        record_chain = None
 
     return (
         PredictionSeries(
-            chain_index=chain_index, path=path, step=step, prediction=prediction
+            chain_index=chain_index,
+            path=path,
+            step=step,
+            prediction=prediction,
+            record_chain=record_chain,
         ),
         abscissa,
         abscissa_name,
