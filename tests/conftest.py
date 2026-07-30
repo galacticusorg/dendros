@@ -1062,3 +1062,11 @@ def analyses_two_models(tmp_path):
             y=[100.0, 200.0],
         )
     return str(a), str(b)
+
+
+@pytest.fixture()
+def samples_dir(tmp_path):
+    """Directory for `pathSamples`-style model prediction files."""
+    d = tmp_path / "samples"
+    d.mkdir()
+    return d

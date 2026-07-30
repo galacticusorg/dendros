@@ -165,7 +165,7 @@ def test_headered_chain_mismatched_names_raises(tmp_path):
         fh.write("#    7 = Parameter `wrong/name`\n")
         fh.write("1 0 0.1 F -1.0 -1.0 0.5\n")
     cfg = parse_mcmc_config(cfg_path)
-    with pytest.raises(ValueError, match="header parameter columns"):
+    with pytest.raises(ValueError, match="header parameter names differ"):
         read_chains(cfg)
 
 

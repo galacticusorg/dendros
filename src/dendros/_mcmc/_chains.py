@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -216,7 +217,13 @@ def discover_chain_files(log_file_root: Union[str, "Path"]) -> List[Path]:
     return [p for p in candidates if _RANK_SUFFIX.search(p.name)]
 
 
-def read_chains(config: MCMCConfig, *, max_steps: Optional[int] = None) -> ChainSet:
+def read_chains(
+    config: MCMCConfig,
+    *,
+    max_steps: Optional[int] = None,
+    log_file_root: Optional[Union[str, "Path"]] = None,
+    on_header_mismatch: str = "raise",
+) -> ChainSet:
     """Discover and read all per-rank chain files for *config*.
 
     Parameters
@@ -228,6 +235,15 @@ def read_chains(config: MCMCConfig, *, max_steps: Optional[int] = None) -> Chain
         chain (see :func:`_read_chain_file`).  Speeds up reading and every
         downstream diagnostic for run-time monitoring, where only the recent
         window matters.  ``None`` (the default) reads the entire history.
+    log_file_root:
+        Override for ``config.log_file_root``.  A run copied from the machine it
+        executed on will have an absolute path in its config that does not exist
+        locally; pass the local root here.
+    on_header_mismatch:
+        What to do when a chain file's header parameter names disagree with the
+        config: ``"raise"`` (default), ``"warn"`` or ``"ignore"``.  Headers are
+        written once at file creation, so a resumed run — or one analysed against
+        a regenerated config — can carry stale names with correct columns.
 
     Returns
     -------
@@ -236,15 +252,20 @@ def read_chains(config: MCMCConfig, *, max_steps: Optional[int] = None) -> Chain
     Raises
     ------
     FileNotFoundError
-        If no chain files are found at ``config.log_file_root``.
+        If no chain files are found.
     """
-    files = discover_chain_files(config.log_file_root)
+    root = config.log_file_root if log_file_root is None else Path(log_file_root)
+    files = discover_chain_files(root)
     if not files:
         raise FileNotFoundError(
-            f"No chain log files found matching "
-            f"'{config.log_file_root}_[0-9][0-9][0-9][0-9].log'"
+            f"No chain log files found matching '{root}_[0-9][0-9][0-9][0-9].log'"
         )
-    chains = [_read_chain_file(p, config, max_steps=max_steps) for p in files]
+    chains = [
+        _read_chain_file(
+            p, config, max_steps=max_steps, on_header_mismatch=on_header_mismatch
+        )
+        for p in files
+    ]
     return ChainSet(config, chains)
 
 
@@ -254,7 +275,11 @@ def read_chains(config: MCMCConfig, *, max_steps: Optional[int] = None) -> Chain
 
 
 def _read_chain_file(
-    path: Path, config: MCMCConfig, *, max_steps: Optional[int] = None
+    path: Path,
+    config: MCMCConfig,
+    *,
+    max_steps: Optional[int] = None,
+    on_header_mismatch: str = "raise",
 ) -> Chain:
     """Parse a single ``<root>_NNNN.log`` file.
 
@@ -328,7 +353,9 @@ def _read_chain_file(
             velocities.append(vel_vals)
 
     if header_param_names is not None:
-        _validate_header_param_names(header_param_names, config, path)
+        _validate_header_param_names(
+            header_param_names, config, path, on_mismatch=on_header_mismatch
+        )
 
     if not rows:
         # Honor the file's existence by returning an empty chain rather than
@@ -445,17 +472,54 @@ def _accumulate_header_param(
 
 
 def _validate_header_param_names(
-    header_names: List[str], config: MCMCConfig, path: Path
+    header_names: List[str],
+    config: MCMCConfig,
+    path: Path,
+    *,
+    on_mismatch: str = "raise",
 ) -> None:
-    """Compare header-derived parameter names with the config's active parameters."""
+    """Compare header-derived parameter names with the config's active parameters.
+
+    A chain file's header is written once, when the file is created, so a run
+    resumed after parameters were renamed — or analysed against a regenerated
+    config — can carry stale names while its columns remain correct.  Pass
+    ``on_mismatch="warn"`` to proceed in that case.  A differing *number* of
+    columns is always fatal, since that would misalign the data.
+    """
+    if on_mismatch not in ("raise", "warn", "ignore"):
+        raise ValueError(
+            f"on_mismatch must be 'raise', 'warn' or 'ignore'; got {on_mismatch!r}"
+        )
+    if on_mismatch == "ignore":
+        return
     # Header columns are 1-based; parameters start at column 7, so index 6 onward.
     header_param_only = [n for n in header_names[6:] if n]
     if not header_param_only:
         return
     expected = list(config.parameter_names)
-    if header_param_only != expected:
+    if header_param_only == expected:
+        return
+
+    if len(header_param_only) != len(expected):
         raise ValueError(
-            f"Chain file {path} header parameter columns "
-            f"{header_param_only!r} do not match the config's active "
-            f"parameters {expected!r}."
+            f"Chain file {path} header has {len(header_param_only)} parameter "
+            f"columns but the config declares {len(expected)}: "
+            f"{header_param_only!r} vs {expected!r}."
         )
+    differing = [
+        (i + 1, h, e)
+        for i, (h, e) in enumerate(zip(header_param_only, expected))
+        if h != e
+    ]
+    message = (
+        f"Chain file {path} header parameter names differ from the config's "
+        f"active parameters in {len(differing)} of {len(expected)} columns "
+        f"(index, header, config): {differing!r}."
+    )
+    if on_mismatch == "raise":
+        raise ValueError(
+            message
+            + " Pass on_header_mismatch='warn' if the parameters were renamed "
+            "but the column order is unchanged."
+        )
+    warnings.warn(message, stacklevel=2)

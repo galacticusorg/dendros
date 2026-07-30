@@ -187,3 +187,135 @@ End-to-end example
 
        fig = run.corner_plot(post_burn=step, drop_chains=outliers)
        fig.savefig("corner.png")
+
+Model prediction vectors
+------------------------
+
+Some likelihood classes record the model vector they evaluated at each
+likelihood call.  ``posteriorSampleLikelihoodHaloMassFunction`` does so when its
+``pathSamples`` option is set, writing one file per constraint per MPI rank.
+These make it possible to ask what the posterior *would* have been under a
+different data weighting, without re-running anything::
+
+    from dendros import index_prediction_files, read_predictions
+
+    index = index_prediction_files("samples")        # scan the directory once
+    preds = read_predictions("samples", label, files=index[label])
+    paired = preds.paired(run.chains)
+
+Three properties of these files are easy to get wrong, and
+:meth:`~dendros.PredictionSet.paired` handles all three:
+
+* **One record per likelihood evaluation, not per accepted state.**  Every
+  proposal reaching the likelihood is recorded.  At a *rejected* step the chain
+  log holds the retained state, not the proposed one, so on its own such a record
+  cannot be attributed to any parameter vector and is dropped.  See
+  :ref:`proposal-logs` to recover them.
+* **Step indices are not contiguous and may be offset.**  Proposals rejected on
+  the prior never reach the likelihood, so records must be *joined* on the step
+  index rather than assumed to align positionally.  Runs predating the
+  labelling fix in ``differential_evolution.F90`` label proposals one step
+  behind the chain log; the convention is detected automatically, and
+  :meth:`~dendros.PredictionSet.step_offset` warns rather than guessing in the
+  rare case where records cover every step and the two are indistinguishable.
+* **Posterior weighting.**  Accepted states persist for a variable number of
+  steps, so use ``paired.multiplicity`` as sample weights for any
+  posterior-averaged quantity.
+
+Always pass ``files=`` from :func:`~dendros.index_prediction_files` when reading
+many constraints: a production run's samples directory holds hundreds of
+thousands of entries, and globbing per label re-walks all of them each time.
+
+.. _proposal-logs:
+
+Recovering the rejected proposals
+---------------------------------
+
+Dropping rejected-step records discards most of the evaluations — at a 15%
+acceptance rate, roughly six in seven — and with them the wider coverage of
+parameter space that rejected proposals explore.  Setting ``logProposals`` on a
+differential-evolution simulation writes the proposed state at every step to
+``<logFileRoot>Proposals_<rank>.log``, which makes all of them usable::
+
+    from dendros import read_proposals
+
+    proposals = read_proposals(run.config, log_file_root="chains")
+    paired    = preds.paired(run.chains, proposals=proposals)
+
+``paired.multiplicity`` is zero for rejected proposals: they are valid samples of
+the model's response but carry no posterior weight.  So weight by multiplicity
+only for posterior-averaged quantities, and pass ``weights=None`` when fitting a
+Jacobian or surrogate — weighting there would throw away precisely the extra
+coverage the proposals provide.  Because that coverage is centred on the
+proposal distribution rather than the posterior, it is usually worth pinning the
+expansion point explicitly::
+
+    fit = jacobian_from_samples(
+        paired.state, paired.prediction, degree=2,
+        center=posterior_mean,        # derivative where it is wanted...
+    )                                 # ...but fitted over the wider sample
+
+Error propagation under a different data covariance
+---------------------------------------------------
+
+Given the paired predictions, the model can be linearized over the posterior
+volume and parameter uncertainties re-derived under a data covariance the
+original fit did not use::
+
+    from dendros import (
+        jacobian_from_samples, fisher_weights, parameter_covariances,
+        rescale_correlation,
+    )
+
+    fit = jacobian_from_samples(
+        paired.state, paired.prediction,
+        weights=paired.multiplicity, active=mapped_parameters, degree=2,
+    )
+    weights = fisher_weights(mu, variance_fractional=f)   # negative binomial
+    result  = parameter_covariances(
+        fit.jacobian * scale[:, None], weights, covariance,
+    )
+    print(result.factors("sandwich"), result.volume_factor("sandwich"))
+
+:class:`~dendros.InflationResult` carries three covariances: ``assumed``
+reproduces the fit that was run, ``optimal`` is what a correctly-weighted fit
+would have given, and ``sandwich`` is the true uncertainty of the mis-weighted
+estimator that *was* used.
+
+Several points decide whether the answer means anything:
+
+* **Validate first.**  ``assumed`` should reproduce the chain's own covariance.
+  If it does not, the linearization or the prior treatment is inadequate and
+  nothing downstream is quantitative.
+* **Prefer** ``degree=2``.  A model that curves over the posterior volume has
+  its linear-fit slopes biased, because the fit trades curvature against the
+  slopes of correlated parameters.  Where a parameter is known not to enter the
+  model prediction — one entering only the variance, say — its fitted Jacobian
+  column should vanish, which makes a free check on the fit's quality.
+* **Inflation is not guaranteed.**  A strongly correlated mode the model cannot
+  produce is effectively marginalized away, which can leave the remaining
+  information *sharper*.  Compute it; do not assume the sign.
+* **Regularize in correlation space.**  A rank-deficient covariance must be
+  conditioned before inversion, but :func:`~dendros.nearest_positive_definite`
+  floors eigenvalues relative to the largest.  Applied to a covariance whose
+  variances span orders of magnitude that swamps the small-variance entries
+  entirely, so convert to correlation form first
+  (:func:`~dendros.to_correlation`), regularize, and restore the scale with
+  :func:`~dendros.rescale_correlation`.
+* **Bracket the correlation strength.**  :func:`~dendros.shrink_to_diagonal`
+  scales off-diagonal terms by ``alpha``, leaving variances untouched.
+  ``alpha=0`` must return an inflation of exactly one, which is a useful null
+  check on the whole pipeline; if the answer is flat across a range of
+  ``alpha``, a better covariance estimate is not worth obtaining.  Note
+  ``alpha>1`` is no longer a valid correlation matrix, so only the ``sandwich``
+  branch — which never inverts the covariance — stays interpretable there.
+
+Fisher matrices are additive over independent constraints, so
+:func:`~dendros.information_shares` ranks constraints by how much each tightens
+the posterior, using only the diagonal weights already in hand.  Run it before
+any covariance work: a constraint contributing negligibly cannot move the result
+however its covariance is treated.
+
+Finite-sample corrections for an estimated covariance are available as
+:func:`~dendros.hartlap_factor` and
+:func:`~dendros.dodelson_schneider_factor`.
