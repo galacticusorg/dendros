@@ -149,6 +149,88 @@ Corner plots
 
 .. autofunction:: dendros.corner_plot
 
+Model prediction vectors
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: dendros.index_prediction_files
+
+.. autofunction:: dendros.discover_prediction_labels
+
+.. autofunction:: dendros.read_predictions
+
+.. autoclass:: dendros.PredictionSet
+   :members:
+
+.. automethod:: dendros.PredictionSet.records_by_chain
+
+.. autoclass:: dendros.PredictionSeries
+   :members:
+
+.. autoclass:: dendros.PairedPredictions
+   :members:
+
+.. autodata:: dendros.SAMPLE_STEP_OFFSETS
+
+.. autodata:: dendros.LEGACY_SAMPLE_STEP_OFFSET
+
+Proposed states
+~~~~~~~~~~~~~~~
+
+.. autofunction:: dendros.read_proposals
+
+.. autofunction:: dendros.discover_proposal_files
+
+.. autoclass:: dendros.ProposalSet
+   :members:
+
+.. autoclass:: dendros.ProposalSeries
+   :members:
+
+Count-data likelihoods
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: dendros.log_likelihood_bins
+
+.. autofunction:: dendros.count_variance
+
+.. autofunction:: dendros.fisher_weights
+
+.. autofunction:: dendros.negative_binomial_shape
+
+.. autodata:: dendros.LOG_IMPROBABLE
+
+Linearized error propagation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: dendros.jacobian_from_samples
+
+.. autoclass:: dendros.JacobianFit
+   :members:
+
+.. autofunction:: dendros.parameter_covariances
+
+.. autoclass:: dendros.InflationResult
+   :members:
+
+.. autofunction:: dendros.fisher_matrix
+
+.. autofunction:: dendros.information_shares
+
+Covariance utilities
+~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: dendros.to_correlation
+
+.. autofunction:: dendros.rescale_correlation
+
+.. autofunction:: dendros.shrink_to_diagonal
+
+.. autofunction:: dendros.nearest_positive_definite
+
+.. autofunction:: dendros.hartlap_factor
+
+.. autofunction:: dendros.dodelson_schneider_factor
+
 Internal helpers
 ----------------
 

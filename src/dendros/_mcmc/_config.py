@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Mapping, Optional, Tuple, Union
 from xml.etree import ElementTree as ET
 
 
@@ -103,12 +103,45 @@ class Likelihood:
         in which case identity mapping (all active parameters) is implied.
     children:
         Tuple of child :class:`Likelihood` instances.  Empty for leaves.
+    options:
+        The remaining scalar sub-parameters of this ``posteriorSampleLikelihood``
+        element, as a ``{tag: value}`` mapping of raw strings.  Each likelihood
+        class defines its own options (``fileNames``, ``redshifts``,
+        ``massRangeMinimum``, … for ``haloMassFunction``), so they are kept
+        uninterpreted here; read them via :meth:`option`, :meth:`option_float`,
+        :meth:`option_bool` or :meth:`option_words`.  ``baseParametersFileName``
+        and ``parameterMap`` are excluded, having their own fields.
     """
 
     kind: str
     base_parameters_file: Optional[Path] = None
     parameter_map: Optional[Tuple[str, ...]] = None
     children: Tuple["Likelihood", ...] = field(default_factory=tuple)
+    options: Mapping[str, str] = field(default_factory=dict)
+
+    def option(self, tag: str, default: Optional[str] = None) -> Optional[str]:
+        """Return option *tag* as a raw string, or *default* when absent."""
+        return self.options.get(tag, default)
+
+    def option_float(self, tag: str, default: Optional[float] = None) -> Optional[float]:
+        """Return option *tag* as a float, or *default* when absent."""
+        raw = self.options.get(tag)
+        return default if raw is None else float(raw)
+
+    def option_bool(self, tag: str, default: bool = False) -> bool:
+        """Return option *tag* as a bool, or *default* when absent."""
+        raw = self.options.get(tag)
+        return default if raw is None else raw.strip() in ("true", ".true.", "T")
+
+    def option_words(self, tag: str) -> Tuple[str, ...]:
+        """Return whitespace-separated option *tag* split into a tuple.
+
+        Empty when the option is absent.  Galacticus uses whitespace-separated
+        lists for vector-valued parameters such as ``fileNames`` and
+        ``redshifts``.
+        """
+        raw = self.options.get(tag)
+        return () if raw is None else tuple(raw.split())
 
     def leaves(self) -> Tuple["Likelihood", ...]:
         """Flatten the tree to its leaf likelihoods (in document order)."""
@@ -320,6 +353,7 @@ def _parse_likelihood(el: ET.Element, base_dir: Path) -> Likelihood:
     # per child likelihood, in document order).
     children: list = []
     pending_map: Optional[Tuple[str, ...]] = None
+    options: dict = {}
     for child in el:
         if child.tag == "parameterMap":
             v = child.get("value", "")
@@ -332,15 +366,22 @@ def _parse_likelihood(el: ET.Element, base_dir: Path) -> Likelihood:
                     base_parameters_file=sub.base_parameters_file,
                     parameter_map=pending_map,
                     children=sub.children,
+                    options=sub.options,
                 )
                 pending_map = None
             children.append(sub)
+        elif child.tag not in ("baseParametersFileName", "parameterInactiveMap"):
+            # Remaining scalar sub-parameters are class-specific; keep them raw.
+            value = child.get("value")
+            if value is not None:
+                options[child.tag] = value
 
     return Likelihood(
         kind=kind,
         base_parameters_file=base_file,
         parameter_map=None,
         children=tuple(children),
+        options=options,
     )
 
 
