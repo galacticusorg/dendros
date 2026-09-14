@@ -21,11 +21,26 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-from scipy.special import gammaln
 
 #: Value Galacticus uses for an effectively impossible log-likelihood
 #: (``Models_Likelihoods_Constants``).
 LOG_IMPROBABLE = -1.0e30
+
+
+def _import_gammaln():
+    """Defer the ``scipy.special.gammaln`` import until first use.
+
+    Keeps ``import dendros`` working without :mod:`scipy`, and raises a clear
+    :class:`ImportError` if it is missing.
+    """
+    try:
+        from scipy.special import gammaln
+    except ImportError as exc:
+        raise ImportError(
+            "log_likelihood_bins requires the optional `scipy` package. "
+            "Install it with: pip install 'dendros[mcmc]'."
+        ) from exc
+    return gammaln
 
 
 def negative_binomial_shape(variance_fractional: float) -> float:
@@ -67,6 +82,7 @@ def log_likelihood_bins(
     numpy.ndarray
         Per-bin log-likelihood.
     """
+    gammaln = _import_gammaln()
     count = np.asarray(count, dtype=float)
     mu = np.asarray(mu, dtype=float)
     bad = mu <= 0.0

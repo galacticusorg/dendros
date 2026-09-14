@@ -22,7 +22,6 @@ API Reference
 
 .. autoclass:: dendros.OutputMeta
    :members:
-   :undoc-members:
    :show-inheritance:
 
 .. autofunction:: dendros.sfh_collapse_metallicities
@@ -90,6 +89,11 @@ Convergence
 .. autofunction:: dendros.convergence_step
 
 .. autofunction:: dendros.geweke
+
+.. autofunction:: dendros.ensemble_drift
+
+.. autoclass:: dendros.EnsembleDriftResult
+   :members:
 
 .. autofunction:: dendros.outlier_chains
 
@@ -160,8 +164,6 @@ Model prediction vectors
 
 .. autoclass:: dendros.PredictionSet
    :members:
-
-.. automethod:: dendros.PredictionSet.records_by_chain
 
 .. autoclass:: dendros.PredictionSeries
    :members:

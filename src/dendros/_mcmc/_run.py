@@ -474,7 +474,7 @@ def open_mcmc(
     ...     print(run.parameters)
     ...     chains = run.chains
 
-    Fast run-time monitoring on the last 1000 steps::
+    Fast run-time monitoring on the last 1000 steps:
 
     >>> with open_mcmc("mcmcConfig.xml", max_steps=1000) as run:
     ...     rhat = run.gelman_rubin()
