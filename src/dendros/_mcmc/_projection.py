@@ -143,8 +143,8 @@ class ProjectionPursuitResult:
 
         Returns
         -------
-        list of (label, loading) pairs
-            Sorted by descending absolute loading.
+        list of tuple
+            ``(label, loading)`` pairs, sorted by descending absolute loading.
         """
         v = self.eigenvectors[:, index]
         out = [

@@ -1,6 +1,9 @@
 """Tests for linearized error propagation over a posterior sample."""
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -243,6 +246,25 @@ def test_impossible_bin_when_count_positive_and_prediction_zero():
     out = log_likelihood_bins(np.array([2.0, 0.0]), np.array([0.0, 0.0]), 0.0)
     assert out[0] < -1e29
     assert out[1] == 0.0
+
+
+def test_dendros_imports_without_scipy():
+    """scipy is optional (the `mcmc` extra), so `import dendros` must not need it.
+
+    Read the Docs installs dendros without scipy; a module-level scipy import
+    makes every autodoc directive in the API reference render empty.
+    """
+    code = "import sys; sys.modules['scipy'] = None; import dendros"
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_log_likelihood_bins_raises_clear_error_without_scipy(monkeypatch):
+    monkeypatch.setitem(sys.modules, "scipy.special", None)
+    with pytest.raises(ImportError, match=r"dendros\[mcmc\]"):
+        log_likelihood_bins(np.array([1.0]), np.array([1.0]), 0.0)
 
 
 def test_observed_information_requires_counts():

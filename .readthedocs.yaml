@@ -16,8 +16,12 @@ python:
       path: .
       extra_requirements:
         - docs
+        # scipy (in the mcmc extra) is needed to import the MCMC modules that
+        # autodoc documents.
+        - mcmc
     - requirements: docs/requirements.txt
 
 sphinx:
   configuration: docs/conf.py
-  fail_on_warning: false
+  # Fail rather than publish empty API pages when autodoc cannot import dendros.
+  fail_on_warning: true
