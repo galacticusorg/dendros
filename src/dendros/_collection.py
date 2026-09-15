@@ -5,7 +5,7 @@ import glob as _glob
 import re
 import warnings
 from pathlib import Path
-from typing import Dict, Iterator, List, Mapping, Optional, Sequence, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -31,10 +31,23 @@ def _default_model_label(primary_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _decode(value) -> str:
-    """Decode bytes/numpy-string HDF5 attribute values to ``str``."""
+def _decode(value) -> Any:
+    """Decode an HDF5 attribute value into a plain Python value.
+
+    Byte strings become ``str``.  A compound (structured) value, such as the
+    ``units`` attribute Galacticus attaches to each dataset, becomes a ``dict``
+    mapping each field name to its decoded value, so that fields can be looked
+    up by name (``attrs["units"]["unitsInSI"]``).  Numeric scalars become the
+    corresponding Python number; anything else is returned as ``str``.
+    """
     if isinstance(value, (bytes, bytearray)):
         return value.decode("utf-8", errors="replace")
+    names = getattr(getattr(value, "dtype", None), "names", None)
+    if names:
+        record = value[()] if isinstance(value, np.ndarray) else value
+        return {name: _decode(record[name]) for name in names}
+    if isinstance(value, np.generic) and not isinstance(value, (np.bytes_, np.str_)):
+        return value.item()
     # numpy.bytes_ is a subclass of bytes; numpy.str_ is a subclass of str
     return str(value) if not isinstance(value, str) else value
 
@@ -226,6 +239,23 @@ class DatasetProxy:
             return shapes[0]
         total = sum(s[0] for s in shapes)
         return (total,) + shapes[0][1:]
+
+    @property
+    def ndim(self) -> int:
+        """Number of dimensions of the dataset (h5py-like)."""
+        return len(self.shape)
+
+    @property
+    def size(self) -> int:
+        """Total number of elements; for multi-file collections summed across files."""
+        return int(np.prod(self.shape, dtype=np.int64))
+
+    def __len__(self) -> int:
+        """Length of the first axis; for multi-file collections summed across files."""
+        shape = self.shape
+        if not shape:
+            raise TypeError("len() of a scalar dataset")
+        return shape[0]
 
     @property
     def name(self) -> str:

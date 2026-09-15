@@ -193,7 +193,8 @@ with open_outputs("galacticus.hdf5") as c:
     print(grp.keys())                      # subgroups / datasets
     print(grp.attrs)                       # group attributes
     ds = c["Outputs/Output1/nodeData/basicMass"]
-    print(ds.dtype, ds.shape)
+    print(ds.dtype, ds.shape, ds.ndim)     # also ds.size and len(ds)
+    print(ds.attrs["units"]["unitsInSI"])  # compound attributes are dicts of fields
 ```
 
 ### Plotting analyses
