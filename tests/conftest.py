@@ -1070,3 +1070,21 @@ def samples_dir(tmp_path):
     d = tmp_path / "samples"
     d.mkdir()
     return d
+
+
+# Galaxy merger tree fixtures for the dendros.viz tests.
+@pytest.fixture
+def tree_file(tmp_path):
+    from ._viz_tree_data import write_tree_file
+
+    return write_tree_file(tmp_path / "trees.hdf5")
+
+
+@pytest.fixture
+def tree(tree_file):
+    pytest.importorskip("scipy")
+    from dendros import open_outputs
+    from dendros.viz import galaxy_merger_tree
+
+    with open_outputs(str(tree_file)) as c:
+        return galaxy_merger_tree(c, "Output1", 7)

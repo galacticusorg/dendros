@@ -243,3 +243,125 @@ Internal helpers
 .. autoclass:: dendros._collection.DatasetProxy
    :members:
    :undoc-members:
+
+Galaxy images
+-------------
+
+.. autofunction:: dendros.viz.galaxy_scene
+
+.. autofunction:: dendros.viz.render_galaxy
+
+.. autofunction:: dendros.viz.compose_rgb
+
+.. autofunction:: dendros.viz.surface_brightness_magnitudes
+
+.. autofunction:: dendros.viz.rotation_matrix
+
+.. autoclass:: dendros.viz.DustModel
+   :members:
+
+.. autoclass:: dendros.viz.SpiralTexture
+   :members:
+
+.. autoclass:: dendros.viz.GalaxyScene
+   :members:
+
+.. autoclass:: dendros.viz.StellarComponent
+   :members:
+
+.. autoclass:: dendros.viz.GasComponent
+   :members:
+
+.. autoclass:: dendros.viz.DensityTable
+   :members:
+
+.. autofunction:: dendros.viz.density_tables
+
+Merger tree diagrams
+--------------------
+
+.. autofunction:: dendros.viz.galaxy_merger_tree
+
+.. autofunction:: dendros.viz.river_layout
+
+.. autofunction:: dendros.viz.render_river
+
+.. autofunction:: dendros.viz.draw_river_tree
+
+.. autofunction:: dendros.viz.river_colormap
+
+.. autofunction:: dendros.viz.specific_star_formation_rate
+
+.. autoclass:: dendros.viz.GalaxyMergerTree
+   :members:
+
+.. autoclass:: dendros.viz.Branch
+   :members:
+
+.. autoclass:: dendros.viz.RiverLayout
+   :members:
+
+.. autofunction:: dendros.viz.radial_layout
+
+.. autofunction:: dendros.viz.render_radial
+
+.. autofunction:: dendros.viz.halo_merger_tree
+
+.. autofunction:: dendros.viz.halo_growth_rate
+
+Galaxy life stories
+-------------------
+
+.. autofunction:: dendros.viz.render_main_branch
+
+.. autofunction:: dendros.viz.presentation_render
+
+.. autofunction:: dendros.viz.load_story_frames
+
+.. autofunction:: dendros.viz.life_story_figure
+
+.. autofunction:: dendros.viz.compose_story_animation
+
+.. autofunction:: dendros.viz.main_branch_rows
+
+.. autoclass:: dendros.viz.StoryFrame
+   :members:
+
+Subhalo orbits
+--------------
+
+.. autofunction:: dendros.viz.subhalo_orbits
+
+.. autofunction:: dendros.viz.render_orbits
+
+.. autofunction:: dendros.viz.compose_orbit_animation
+
+.. autoclass:: dendros.viz.SubhaloOrbits
+   :members:
+
+Many histories
+--------------
+
+.. autofunction:: dendros.viz.main_branch_histories
+
+.. autofunction:: dendros.viz.render_tracks
+
+.. autofunction:: dendros.viz.draw_tracks
+
+.. autoclass:: dendros.viz.Histories
+   :members:
+
+Lightcone images
+----------------
+
+.. autofunction:: dendros.viz.lightcone_field
+
+.. autofunction:: dendros.viz.render_lightcone
+
+.. autofunction:: dendros.viz.add_noise
+
+.. autoclass:: dendros.viz.LightconeField
+   :members:
+
+.. autoclass:: dendros.viz.LightconeGalaxy
+   :members:
