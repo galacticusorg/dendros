@@ -23,7 +23,7 @@ reports, feature requests, documentation improvements, and code contributions.
    cd dendros
    ```
 
-2. **Create a virtual environment** (Python ≥ 3.8):
+2. **Create a virtual environment** (Python ≥ 3.10):
 
    ```bash
    python -m venv .venv

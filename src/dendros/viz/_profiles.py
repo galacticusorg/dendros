@@ -15,7 +15,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-#: Trapezoidal integration (``np.trapz`` was renamed ``np.trapezoid`` in NumPy 2.0, and Python 3.8 has only NumPy < 2).
+#: Trapezoidal integration (``np.trapz`` was renamed ``np.trapezoid`` in NumPy 2.0, and dendros also supports NumPy 1.x).
 _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
 #: Galacticus writes this sentinel where a radius (or the density at it) is undefined.
