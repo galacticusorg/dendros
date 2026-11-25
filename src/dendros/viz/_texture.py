@@ -65,6 +65,9 @@ class SpiralTexture:
     segment_width:
         Correlation length of the flocculent segments across the spiral direction
         [radians of azimuth].
+    segment_contrast:
+        Standard deviation of the log-normal field of flocculent segments. Larger values
+        make the segments sparser, separated by dark gaps rather than joined into arcs.
     seed:
         Random seed for the clump field and the arm pattern.
     """
@@ -84,6 +87,7 @@ class SpiralTexture:
     flocculence: float = 0.35
     segment_length: float = 0.35
     segment_width: float = 0.12
+    segment_contrast: float = 1.2
     seed: int = 1
 
     #: Range of ln(R/radius_scale) covered by the arm tables, and their resolution.
@@ -155,7 +159,8 @@ class SpiralTexture:
         grand /= grand.mean(axis=1, keepdims=True)
         # Flocculent segments: a log-normal field elongated along the spiral direction.
         flocculent = np.exp(
-            1.2 * self._random_field(rng, self.segment_length, self.segment_width)
+            self.segment_contrast
+            * self._random_field(rng, self.segment_length, self.segment_width)
         )
         flocculent /= flocculent.mean(axis=1, keepdims=True)
         pattern_eta = (1.0 - self.flocculence) * grand + self.flocculence * flocculent

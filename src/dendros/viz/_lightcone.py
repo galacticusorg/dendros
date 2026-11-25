@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
+from ._dynamics import dynamical_spiral_texture, rotation_curves
 from ._galaxy import GalaxyScene, GasComponent, StellarComponent
 from ._profiles import density_tables
 from ._render import DustModel, render_galaxy
@@ -136,6 +137,14 @@ def lightcone_field(
     densities, radii = column("densityProfile"), column("densityProfileRadius")
     descriptions = np.asarray(group["densityProfileColumns"][()])
     angles = np.asarray(group["densityProfileColumnValues"][()])
+    if "rotationCurveRadius" in available:
+        curves = (
+            column("rotationCurve"),
+            column("rotationCurveRadius"),
+            np.asarray(group["rotationCurveColumns"][()]),
+        )
+    else:
+        curves = None
     position = np.stack([column(f"lightconePosition{a}") for a in "XYZ"], axis=1)
     spin = np.stack([column(f"spinAngularMomentumVector{a}") for a in "XYZ"], axis=1)
     redshift_observed = column("lightconeRedshiftObserved")
@@ -228,6 +237,11 @@ def lightcone_field(
             float(scalars["diskRadius"][i]),
             float(scalars["spheroidRadius"][i]),
             float(scalars["radiusHalfMassStellar"][i]),
+            rotation_curve=(
+                rotation_curves(curves[0][i], curves[1][i], curves[2])
+                if curves is not None
+                else None
+            ),
         )
         sky = np.array([position[i, 2], position[i, 1]]) / position[i, 0] / _ARCSEC
         if orientation == "spin" and np.linalg.norm(spin[i]) > 0.0:
@@ -270,7 +284,7 @@ def render_lightcone(
     taper: float = 0.25,
     stamp_maximum: int = 900,
     dust: Optional[DustModel] = None,
-    texture: bool = False,
+    texture=False,
     young_scale_height: Optional[Dict[str, float]] = None,
     n_steps: int = 256,
     threads: Optional[int] = None,
@@ -287,7 +301,10 @@ def render_lightcone(
     distance (including the factor 1/(1+z) of Galacticus' observed-frame luminosities),
     and its angular size follows from the angular diameter distance.  ``psf_fwhm``
     [arcsec] per band convolves each band with a Gaussian point-spread function.
-    ``texture`` adds the (non-model) spiral texture to disks.  Galaxies are rendered in
+    ``texture`` adds the (non-model) spiral texture to disks: ``True`` gives every disk
+    the default :class:`~dendros.viz.SpiralTexture`, and ``"dynamical"`` gives each one
+    the texture that follows from its own dynamics (:func:`~dendros.viz.dynamical_spiral_texture`;
+    the model must output rotation curves).  Galaxies are rendered in
     ``threads`` parallel threads (default: up to 8).
     """
     import os
@@ -297,6 +314,14 @@ def render_lightcone(
 
     from ._texture import SpiralTexture
 
+    if texture not in (False, True, "dynamical"):
+        raise ValueError("texture must be False, True or 'dynamical'")
+    if texture == "dynamical" and any(
+        g.scene.rotation_curve is None for g in field.galaxies
+    ):
+        raise ValueError(
+            "dynamical textures need the model's rotation curves (the rotationCurve extractor)"
+        )
     bands = list(bands) if bands is not None else list(field.galaxies[0].scene.bands)
     npix = int(round(field.size / pixel_scale))
     images = {b: np.zeros((npix, npix), dtype=np.float64) for b in bands}
@@ -324,13 +349,14 @@ def render_lightcone(
         half_angle = 0.5 * stamp * pixel_scale
         factor = int(np.clip(stamp_maximum // stamp, 1, oversample))
         fine = stamp * factor
-        tex = (
-            SpiralTexture(
+        if not texture or not scene.radius_disk > 0.0:
+            tex = None
+        elif texture == "dynamical":
+            tex = dynamical_spiral_texture(scene)
+        else:
+            tex = SpiralTexture(
                 radius_scale=scene.radius_disk, seed=int(scene.node_index) % 100000
             )
-            if texture and scene.radius_disk > 0.0
-            else None
-        )
         rendered = render_galaxy(
             scene,
             bands=bands,
