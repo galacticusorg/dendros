@@ -207,7 +207,8 @@ The arms mix two patterns:
 
 Young light is also broken into clumps by a log-normal random field (``clumpiness``,
 ``clump_size``), and dust is broken up by the same field at half the strength. The
-arms fade out inside ``radius_inner`` scale radii, leaving the bulge region smooth.
+arms fade out inside ``radius_inner`` scale radii, leaving the bulge region smooth, and,
+if ``radius_outer`` is set, beyond that many scale radii (over ``radius_outer_width``).
 ``seed`` selects the random pattern; ``azimuth`` in
 :func:`~dendros.viz.render_galaxy` rotates the galaxy about its own axis.
 
@@ -270,6 +271,10 @@ the surface densities of the disk's stars and gas. From these:
   the dispersion raised as needed to keep the gas marginally stable
   (:math:`Q_\mathrm{gas} \ge 1`). Gas-rich disks so get the large clumps seen at high
   redshift.
+* **Extent.** The estimates hold where they are made, so the arms fade out beyond 2.2
+  scale radii, as a Gaussian of width one scale radius (``radius_outer`` and
+  ``radius_outer_width`` of :class:`~dendros.viz.SpiralTexture`, which applies no such
+  fade by default).
 
 The constants are chosen so that a Milky-Way-like disk gets roughly the default
 texture; any parameter can be overridden by passing it to

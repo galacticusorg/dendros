@@ -240,6 +240,29 @@ def test_texture_preserves_annulus_light():
     )
 
 
+def test_texture_fades_beyond_outer_radius():
+    """With radius_outer set, the arm contrast is unchanged inside it and vanishes far beyond it."""
+    phi = -np.pi + 2.0 * np.pi * np.arange(4096) / 4096
+    plain = SpiralTexture(radius_scale=RS, clumpiness=0.0)
+    faded = SpiralTexture(
+        radius_scale=RS, clumpiness=0.0, radius_outer=2.2, radius_outer_width=1.0
+    )
+
+    def contrast(texture, factor):
+        R = factor * RS
+        f = texture(R * np.cos(phi), R * np.sin(phi), 0.0 * phi, "disk", "young")
+        return f.std(), f.mean()
+
+    assert contrast(faded, 1.5)[0] == pytest.approx(contrast(plain, 1.5)[0])
+    # One width beyond: exp(-1/2) of the contrast; five widths beyond: none, and the annulus mean is still one.
+    assert contrast(faded, 3.2)[0] == pytest.approx(
+        np.exp(-0.5) * contrast(plain, 3.2)[0], rel=0.02
+    )
+    std, mean = contrast(faded, 7.2)
+    assert std < 1.0e-4 * contrast(plain, 7.2)[0] + 1.0e-6
+    assert mean == pytest.approx(1.0, rel=1.0e-3)
+
+
 def test_density_tables_from_columns():
     """Columns ordered with radius fastest, as the densityProfile extractor writes them."""
     specs = [f"diskRadius:disk:stellar:{f:.5g}" for f in FACTORS]

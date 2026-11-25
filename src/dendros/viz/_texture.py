@@ -20,7 +20,7 @@ so arm colors follow from the model's own young-to-old luminosity ratio.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 
@@ -50,6 +50,12 @@ class SpiralTexture:
         Correlation length of the clump field [scale radii].
     radius_inner:
         Radius [scale radii] inside which the arms fade out (bulge region).
+    radius_outer:
+        Radius [scale radii] beyond which the arms fade out, as a Gaussian in
+        (R - radius_outer) of width ``radius_outer_width`` scale radii. ``None`` (the
+        default) keeps the arms at full amplitude out to any radius.
+    radius_outer_width:
+        Width [scale radii] of the outer fade.
     components:
         Stellar/gas components to which the texture applies.
     irregularity:
@@ -82,6 +88,8 @@ class SpiralTexture:
     clumpiness: float = 0.8
     clump_size: float = 0.06
     radius_inner: float = 0.5
+    radius_outer: Optional[float] = None
+    radius_outer_width: float = 1.0
     components: Sequence[str] = ("disk",)
     irregularity: float = 0.35
     flocculence: float = 0.35
@@ -190,6 +198,10 @@ class SpiralTexture:
             R = self.radius_scale * np.exp(np.linspace(*self._U_RANGE, self._N_U))
             # Fade the arms in outside radius_inner so the bulge region stays smooth.
             fade = 1.0 - np.exp(-((R / (self.radius_inner * self.radius_scale)) ** 2))
+            # Fade them out beyond radius_outer, if set.
+            if self.radius_outer is not None:
+                excess = np.maximum(R / self.radius_scale - self.radius_outer, 0.0)
+                fade = fade * np.exp(-0.5 * (excess / self.radius_outer_width) ** 2)
             a = (amplitude * fade)[:, None]
             self._tables[kind] = (1.0 - a) + a * self._pattern
         return self._tables[kind]
