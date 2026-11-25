@@ -286,6 +286,31 @@ for details.
 
 ---
 
+## Galaxy images
+
+`dendros.viz` makes mock color images of single galaxies, seen from any
+direction, from the model's own description of them: the density of each
+component tabulated by Galacticus' `densityProfile` extractor (on a grid of
+radius and polar angle), the luminosity of each component, and the gas mass
+and metallicity, from which the dust follows.  Optional, clearly separated
+presentation features (spiral arms, star-forming clumps, thinner dust and
+young-star layers) redistribute light without changing the model's profiles
+or luminosities.  Requires the `[viz]` extra: `pip install 'dendros[viz]'`.
+
+```python
+from dendros import open_outputs
+from dendros.viz import galaxy_scene, render_galaxy, compose_rgb
+
+with open_outputs("galaxies.hdf5") as c:
+    scene = galaxy_scene(c, "Output1", 9)
+rgb = compose_rgb(render_galaxy(scene, inclination=60.0))
+```
+
+See the [galaxy images docs page](https://dendros.readthedocs.io/en/latest/viz.html)
+for the model outputs needed and the rendering options.
+
+---
+
 ## Documentation
 
 Full API reference and more examples are available at
