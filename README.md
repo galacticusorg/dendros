@@ -32,6 +32,13 @@ To enable plotting of Galacticus `/analyses` results (requires matplotlib):
 pip install 'dendros[plot]'
 ```
 
+To enable the visualization tools in `dendros.viz` (galaxy images, merger trees,
+orbits and lightcones; requires scipy and matplotlib):
+
+```bash
+pip install 'dendros[viz]'
+```
+
 Install the latest development version directly from GitHub:
 
 ```bash

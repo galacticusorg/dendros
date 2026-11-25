@@ -18,7 +18,8 @@ the bands are combined into a color image.
    :width: 400
    :alt: A rendered disk galaxy seen at 35 degrees, with blue star-forming knots in its arms.
 
-The visualization tools need ``scipy`` and ``astropy``::
+The visualization tools need ``scipy``, ``astropy`` and (for merger trees, orbits and
+tracks) ``matplotlib``::
 
     pip install 'dendros[viz]'
 
