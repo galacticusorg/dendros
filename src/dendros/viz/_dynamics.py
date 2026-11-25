@@ -280,7 +280,9 @@ def dynamical_spiral_texture(
       ``amplitude_dust`` is 0.9 times that;
     * ``clumpiness`` — 1.2 / sqrt(1 + (Q_gas/1.5)²);
     * ``clump_size`` — ``clump_fraction`` times the gas's Toomre length, within 0.02 to 0.3
-      scale radii.
+      scale radii;
+    * ``radius_outer`` — the radius at which the dynamics are evaluated (2.2 scale radii by
+      default): the arms fade out beyond it, where the estimate no longer applies.
 
     The constants are chosen so that a Milky-Way-like disk gets roughly the default texture.
     Any :class:`~dendros.viz.SpiralTexture` parameter may be overridden through
@@ -325,6 +327,7 @@ def dynamical_spiral_texture(
         segment_length=0.35 - 0.23 * s,
         segment_contrast=1.2 + 1.2 * s,
         segment_width=float(np.clip(0.8 / m, 0.05, 0.25)) if np.isfinite(m) else 0.05,
+        radius_outer=float(dynamics.radius / scene.radius_disk),
         seed=int(scene.node_index) % 100000 if seed is None else seed,
     )
     parameters.update(overrides)

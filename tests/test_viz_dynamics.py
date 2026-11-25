@@ -161,6 +161,8 @@ def test_texture_follows_dynamics():
     assert heavy.amplitude_old > light.amplitude_old
     assert heavy.segment_length > light.segment_length
     assert heavy.segment_contrast < light.segment_contrast
+    # The arms fade beyond the radius at which the dynamics were evaluated.
+    assert heavy.radius_outer == pytest.approx(2.2)
     # Gas-rich (unstable) disks are clumpier, with larger clumps, than gas-poor ones; a gas-free disk has no clumps
     # and no extra concentration of young light into the arms.
     rich = dynamical_spiral_texture(scene, _dynamics(sigma_gas=5.0e14))
