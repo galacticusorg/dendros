@@ -18,6 +18,13 @@ Quick start::
 Requires scipy and astropy (``pip install 'dendros[viz]'``).
 """
 
+from ._dynamics import (
+    DiskDynamics,
+    RotationCurve,
+    disk_dynamics,
+    dynamical_spiral_texture,
+    rotation_curves,
+)
 from ._galaxy import GalaxyScene, GasComponent, StellarComponent, galaxy_scene
 from ._profiles import DensityTable, density_tables
 from ._render import (
@@ -70,6 +77,7 @@ from ._tree import (
 __all__ = [
     "Branch",
     "DensityTable",
+    "DiskDynamics",
     "DustModel",
     "GalaxyMergerTree",
     "GalaxyScene",
@@ -78,6 +86,7 @@ __all__ = [
     "LightconeField",
     "LightconeGalaxy",
     "RiverLayout",
+    "RotationCurve",
     "SpiralTexture",
     "StellarComponent",
     "StoryFrame",
@@ -87,6 +96,8 @@ __all__ = [
     "compose_rgb",
     "compose_story_animation",
     "density_tables",
+    "disk_dynamics",
+    "dynamical_spiral_texture",
     "draw_river_tree",
     "draw_tracks",
     "galaxy_merger_tree",
@@ -110,6 +121,7 @@ __all__ = [
     "river_colormap",
     "river_layout",
     "rotation_matrix",
+    "rotation_curves",
     "specific_star_formation_rate",
     "subhalo_orbits",
     "surface_brightness_magnitudes",

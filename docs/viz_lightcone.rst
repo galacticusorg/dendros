@@ -94,7 +94,9 @@ to ``oversample`` times the pixel resolution, fading the stamp out over its oute
 rendered in parallel threads. The images are in nJy per pixel.
 :func:`~dendros.viz.add_noise` adds Gaussian noise for a 5σ point-source depth in a
 circular aperture. The presentation options of :doc:`viz` (``young_scale_height``,
-``texture``) apply here too.
+``texture``) apply here too. ``texture="dynamical"`` gives each disk the spiral texture
+that follows from its own dynamics (see :doc:`viz`; the model must output rotation
+curves), while ``texture=True`` gives every disk the same default texture.
 
 Rendering takes about a second per galaxy (in one thread), so a few thousand galaxies
 take tens of minutes.

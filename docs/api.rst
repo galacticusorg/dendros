@@ -263,6 +263,18 @@ Galaxy images
 .. autoclass:: dendros.viz.SpiralTexture
    :members:
 
+.. autofunction:: dendros.viz.dynamical_spiral_texture
+
+.. autofunction:: dendros.viz.disk_dynamics
+
+.. autoclass:: dendros.viz.DiskDynamics
+   :members:
+
+.. autoclass:: dendros.viz.RotationCurve
+   :members:
+
+.. autofunction:: dendros.viz.rotation_curves
+
 .. autoclass:: dendros.viz.GalaxyScene
    :members:
 

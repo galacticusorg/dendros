@@ -211,6 +211,81 @@ arms fade out inside ``radius_inner`` scale radii, leaving the bulge region smoo
 ``seed`` selects the random pattern; ``azimuth`` in
 :func:`~dendros.viz.render_galaxy` rotates the galaxy about its own axis.
 
+Spirals from the disk's dynamics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of choosing the texture's parameters by hand,
+:func:`~dendros.viz.dynamical_spiral_texture` derives them from the disk's dynamics as
+the model predicts them, so that which galaxies look grand-design, multi-armed,
+flocculent, clumpy or smooth, and how tightly their arms are wound, is set by the
+model:
+
+.. code-block:: python
+
+   from dendros.viz import disk_dynamics, dynamical_spiral_texture
+
+   dynamics = disk_dynamics(scene)            # at 2.2 disk scale radii
+   texture = dynamical_spiral_texture(scene, dynamics)
+   images = render_galaxy(scene, inclination=35.0, texture=texture)
+
+This needs the model's rotation curves, in total and for the disk alone, around the
+disk: add the ``rotationCurve`` extractor to the model's output, e.g.
+
+.. code-block:: xml
+
+   <nodePropertyExtractor value="rotationCurve">
+     <radiusSpecifiers value="diskRadius:all:all:0.5 diskRadius:all:all:1.0 diskRadius:all:all:1.5
+                              diskRadius:all:all:2.2 diskRadius:all:all:3.0 diskRadius:all:all:4.0
+                              diskRadius:disk:all:0.5 diskRadius:disk:all:1.0 diskRadius:disk:all:1.5
+                              diskRadius:disk:all:2.2 diskRadius:disk:all:3.0 diskRadius:disk:all:4.0"/>
+     <includeRadii value="true"/>
+   </nodePropertyExtractor>
+
+:func:`~dendros.viz.galaxy_scene` and :func:`~dendros.viz.lightcone_field` then read
+them into ``scene.rotation_curve``. :func:`~dendros.viz.disk_dynamics` measures, at 2.2
+disk scale radii (where an exponential disk's own rotation curve peaks), the circular
+velocity, its logarithmic slope, the disk's share of it, and (from the density grids)
+the surface densities of the disk's stars and gas. From these:
+
+* **Number of arms, and flocculence.** Swing amplification favors the azimuthal
+  wavenumber :math:`m = \kappa^2 R / (2\pi G \Sigma_\mathrm{disk} X)`, with
+  :math:`X \approx 1.5` (Toomre 1981; Carlberg & Freedman 1985; D'Onghia et al. 2013).
+  For an exponential disk in a flat rotation curve this is roughly
+  :math:`m \approx 2.1 / f_\mathrm{disk}`, where :math:`f_\mathrm{disk} =
+  V_\mathrm{disk}^2/V_\mathrm{c}^2`. Maximal disks grow two or three arms, while disks
+  dominated by their halos grow many short-lived ones, so the pattern becomes
+  flocculent: short, narrow, separate arm segments.
+* **Pitch angle.** :math:`\tan p = (2/7)\sqrt{4 - 2\Gamma}/\Gamma`, with
+  :math:`\Gamma = -\mathrm{d}\ln\Omega/\mathrm{d}\ln R` the shear (Michikoshi & Kokubo
+  2014). Rising rotation curves give open arms (:math:`p \approx 22°` for a flat
+  rotation curve), falling ones tightly wound arms.
+* **Arm strength.** In old light, :math:`0.6 f_\mathrm{disk}`: a disk embedded in a
+  dominant halo or bulge is nearly smooth in old stars. In young light and dust, a
+  function of the Toomre parameter of the gas, :math:`Q_\mathrm{gas} =
+  \sigma_\mathrm{gas}\kappa/(\pi G \Sigma_\mathrm{gas})` (with a 10 km/s velocity
+  dispersion): unstable, gas-rich disks gather their star formation into arms and
+  clumps, while gas-poor disks are smooth, like lenticulars.
+* **Clumps.** Their strength also falls with :math:`Q_\mathrm{gas}`, and their size is
+  a tenth of the Toomre length of the gas, :math:`2\pi\sigma_\mathrm{gas}/\kappa`, with
+  the dispersion raised as needed to keep the gas marginally stable
+  (:math:`Q_\mathrm{gas} \ge 1`). Gas-rich disks so get the large clumps seen at high
+  redshift.
+
+The constants are chosen so that a Milky-Way-like disk gets roughly the default
+texture; any parameter can be overridden by passing it to
+:func:`~dendros.viz.dynamical_spiral_texture`. Galacticus models neither the velocity
+dispersions of disks nor bars or tidal perturbers, so grand-design patterns driven by
+bars or companions are not predicted, and the texture remains a presentation device:
+the arm pattern itself is still a random realization.
+
+.. image:: images/viz_dynamical_spirals.jpg
+   :width: 100%
+   :alt: Nine renders of one model galaxy with dynamical spiral textures: two or three open arms for a maximal disk, many flocculent segments for a halo-dominated one, clumpy star formation for unstable gas.
+
+*One model galaxy's light, drawn with the textures that would follow for different
+dynamics: the disk's share of the gravity falls from 0.65 (a maximal disk) to 0.2
+downwards, and the gas's Toomre parameter rises from 0.8 to 4 to the right.*
+
 Thinner dust and young-star layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

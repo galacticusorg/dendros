@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
+from ._dynamics import RotationCurve, rotation_curves
 from ._profiles import DensityTable, density_tables
 
 #: Effective wavelengths of the SDSS filters [Å], used to scale the dust opacity.
@@ -93,6 +94,8 @@ class GalaxyScene:
     radius_disk: float
     radius_spheroid: float
     radius_half_mass: float
+    #: The model's rotation curves, if it ran the ``rotationCurve`` extractor (used by dynamical textures).
+    rotation_curve: Optional[RotationCurve] = None
 
     def extent(self, factor: float = 4.0) -> float:
         """A sensible half-width for an image [Mpc]: ``factor`` stellar half-mass radii."""
@@ -182,6 +185,15 @@ def galaxy_scene(
         radius_disk=scalar("diskRadius"),
         radius_spheroid=scalar("spheroidRadius"),
         radius_half_mass=scalar("radiusHalfMassStellar"),
+        rotation_curve=(
+            rotation_curves(
+                _read(c, output, "rotationCurve", where)[0],
+                _read(c, output, "rotationCurveRadius", where)[0],
+                np.asarray(group["rotationCurveColumns"][()]),
+            )
+            if "rotationCurveRadius" in available
+            else None
+        ),
     )
 
 
